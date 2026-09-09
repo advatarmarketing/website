@@ -1,0 +1,13 @@
+{
+  "name": "advatar-website",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Advatar — impact-focused marketing agency. Static SPA + Vercel functions.",
+  "scripts": {
+    "start": "vercel dev"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.35.0"
+  }
+}
