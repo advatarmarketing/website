@@ -34,7 +34,7 @@
   --gold-text:     #F2A93B;
 
   /* Grain reads stronger on dark, so each theme sets its own weight + blend. */
-  --grain-opacity: 0.12;
+  --grain-opacity: 0.30;
   --grain-blend:   overlay;
 
   /* Ambient texture strength behind sections. */
@@ -99,8 +99,8 @@
   --gold-text:     #8F5620;
 
   /* Soft-light + lower opacity, or grain reads as dirt on a warm near-white. */
-  --grain-opacity: 0.06;
-  --grain-blend:   soft-light;
+  --grain-opacity: 0.12;
+  --grain-blend:   multiply;
 
   --ambient-a:     0.55;
   --texture-a:     0.10;
@@ -258,12 +258,20 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .grain-defs { position: absolute; width: 0; height: 0; }
 
+/*
+  Real scanned film grain (Texture Fabrik), tiled at 1:1 so the grain keeps its
+  native size rather than being stretched. Fixed to the viewport, so it sits over
+  every pixel of every page and doesn't scroll with content — that's what makes
+  it read as film rather than as a background pattern.
+*/
 .grain {
   position: fixed;
   inset: 0;
   z-index: var(--z-grain);
   pointer-events: none;
-  filter: url(#grain-filter);
+  background-image: url('/assets/grain.png');
+  background-repeat: repeat;
+  background-size: 512px 512px;
   opacity: var(--grain-opacity);
   mix-blend-mode: var(--grain-blend);
 }
@@ -1084,6 +1092,10 @@ a.glass-card:hover,
   padding-top: clamp(2rem, 5vw, 3rem);
   border-top: 1px solid var(--hairline);
 }
+.all-clients [data-toggle] .icon { transition: transform var(--mid) var(--ease); }
+.all-clients [data-toggle][aria-expanded='true'] .icon { transform: rotate(90deg); }
+
+.all-clients-panel { margin-top: 2rem; }
 
 .client-index + .client-index { margin-top: 2rem; }
 
@@ -1624,6 +1636,100 @@ a.glass-card:hover,
 }
 .webdev-pill:hover { color: var(--text-lo); border-color: var(--hairline); }
 
+/* ============================== Living sheen on key type ================= */
+
+/*
+  A very slow gradient that drifts across headings, plus a faint glow. Both
+  stops are almost the same colour — the effect should read as the type quietly
+  breathing, not as a rainbow. --sheen-b is a near neighbour of --sheen-a, and
+  BOTH ends clear WCAG AA, so the animation can never dip text below contrast.
+*/
+:root {
+  --sheen-a: var(--text-hi);
+  --sheen-b: #C9C2B4;              /* dark theme: a touch dimmer than --text-hi */
+  --sheen-glow: rgba(242, 169, 59, 0.16);
+}
+:root[data-theme='light'] {
+  --sheen-b: #4A4239;              /* light theme: near-black lifted to dark grey */
+  --sheen-glow: rgba(201, 122, 46, 0.14);
+}
+
+@keyframes sheen-drift {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+/*
+  Applied to display headings. background-clip:text needs a transparent colour,
+  so the gradient IS the text fill — if the animation is disabled the gradient
+  still paints, it simply stops moving.
+*/
+.display,
+.glow-text {
+  background-image: linear-gradient(
+    100deg,
+    var(--sheen-a) 0%,
+    var(--sheen-a) 32%,
+    var(--sheen-b) 50%,
+    var(--sheen-a) 68%,
+    var(--sheen-a) 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: repeat-x;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: sheen-drift 18s linear infinite;
+  /* The "very slight glow" — sits behind the glyphs, not on them. */
+  filter: drop-shadow(0 0 14px var(--sheen-glow));
+}
+
+/* Gradient-filled text can't also carry a background colour, so the stat
+   numbers keep their own gold gradient and opt out of the sheen. */
+.stat-row .stat .num { animation: none; filter: none; }
+
+/*
+  A child of a gradient-filled heading inherits `transparent` but has no
+  background of its own to clip — it would render invisible. Give any such child
+  a real fill back, except a .glow-word, which brings its own gradient.
+*/
+.display > *:not(.glow-word) {
+  color: var(--text-hi);
+  -webkit-text-fill-color: var(--text-hi);
+}
+
+/* One word inside a line, e.g. a name or a key noun. */
+.glow-word {
+  background-image: linear-gradient(100deg,
+    var(--gold-text) 0%, var(--gold-text) 35%, var(--gold-1) 50%, var(--gold-text) 65%, var(--gold-text) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: sheen-drift 14s linear infinite;
+}
+
+/* Arrows and monoline icons get the same slow breath as a soft halo. */
+@keyframes glow-pulse {
+  0%, 100% { filter: drop-shadow(0 0 3px var(--sheen-glow)); }
+  50%      { filter: drop-shadow(0 0 9px var(--sheen-glow)); }
+}
+.link-arrow .icon,
+.results-row .result .icon,
+.eyebrow .icon,
+.carousel-nav .icon,
+.btn .icon { animation: glow-pulse 7s ease-in-out infinite; }
+
+/* Website screenshots and media frames get a drifting edge glow. */
+@keyframes frame-glow {
+  0%, 100% { box-shadow: 0 0 0 1px var(--glass-border), 0 0 18px -6px var(--sheen-glow); }
+  50%      { box-shadow: 0 0 0 1px var(--glass-border), 0 0 30px -4px var(--sheen-glow); }
+}
+.site-grid .media,
+.media--wide { animation: frame-glow 9s ease-in-out infinite; }
+
 /* ==================================================== Scroll reveals ===== */
 
 /*
@@ -1764,6 +1870,16 @@ a.glass-card:hover,
 }
 .carousel-track::-webkit-scrollbar { display: none; }
 .carousel-track > * { scroll-snap-align: start; }
+
+/*
+  Snap fights a slow continuous drift — it would yank the row back to the
+  nearest card every frame — so the auto-scrolling row opts out of it and out
+  of smooth-scroll, and relies on free scrolling plus drag instead.
+*/
+.carousel-track[data-autoscroll='true'] {
+  scroll-snap-type: none;
+  scroll-behavior: auto;
+}
 .carousel-track[data-dragging='true'] { cursor: grabbing; scroll-behavior: auto; scroll-snap-type: none; }
 .carousel-track[data-dragging='true'] * { pointer-events: none; }
 
@@ -1949,4 +2065,24 @@ a.glass-card:active, .glass-card--interactive:active { transform: translateY(-1p
 
   /* Unravel opens instantly rather than animating. */
   .disclosure-panel--animated { transition: none; }
+
+  /* The sheen stops drifting but the gradient still paints, so headings keep
+     their fill and never go transparent. */
+  .display, .glow-text, .glow-word { animation: none; }
+  .link-arrow .icon, .results-row .result .icon, .eyebrow .icon,
+  .carousel-nav .icon, .btn .icon { animation: none; filter: none; }
+  .site-grid .media, .media--wide { animation: none; }
+}
+
+/*
+  Safety net: if background-clip:text isn't supported, the transparent fill
+  would make every heading invisible. Restore a solid colour in that case.
+*/
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .display, .glow-text, .glow-word {
+    background-image: none;
+    color: var(--text-hi);
+    -webkit-text-fill-color: var(--text-hi);
+  }
+  .glow-word { color: var(--gold-text); -webkit-text-fill-color: var(--gold-text); }
 }

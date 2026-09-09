@@ -443,8 +443,8 @@ async function renderHome() {
     { n: '03', glyph: 'diamond', title: 'Branding', copy: 'Elevating your brand.', href: '/our-work#branding' },
   ];
 
-  const winCard = (client, index) => `
-    <article class="win-card" data-reveal style="--i:${index}">
+  const winCard = (client, index, isClone = false) => `
+    <article class="win-card"${isClone ? ' aria-hidden="true"' : ' data-reveal'} style="--i:${index}">
       ${mediaTile({
         driveFileId: client.videos?.[0]?.driveFileId,
         title: `${client.name} — reel`,
@@ -452,7 +452,8 @@ async function renderHome() {
       })}
       <div class="win-meta">
         <h3>${esc(client.name)}</h3>
-        <button type="button" class="link-arrow" data-win="${esc(client.id)}">
+        <button type="button" class="link-arrow" data-win="${esc(client.id)}"
+                ${isClone ? 'tabindex="-1"' : ''}>
           <span>See more</span>${icon('arrowRight')}
         </button>
       </div>
@@ -493,8 +494,15 @@ async function renderHome() {
             <span class="dim">A snapshot of who we've been building for lately.</span></p>
         </div>
         ${wins.length
-          ? `<div class="carousel" data-carousel data-at-end="false">
-               <div class="carousel-track">${wins.map(winCard).join('')}</div>
+          ? `<div class="carousel" data-carousel>
+               <div class="carousel-track" data-autoscroll="true">
+                 <!-- map() passes the array as a third argument, so call winCard
+                      explicitly — otherwise every card is flagged as a clone. -->
+                 ${wins.map((client, i) => winCard(client, i)).join('')}
+                 <!-- A second pass of the same cards, so the slow drift can wrap
+                      around seamlessly. Hidden from assistive tech. -->
+                 ${wins.map((client, i) => winCard(client, i, true)).join('')}
+               </div>
                <button type="button" class="icon-btn carousel-nav" data-carousel-next
                        aria-label="Scroll to more recent wins">${icon('arrowRight')}</button>
              </div>`
@@ -567,12 +575,33 @@ async function renderOurWork() {
   const featured = clients.filter((client) => client.featured).slice(0, 4);
   const stats = settings.resultsStats ?? [];
 
+  /*
+    Display order for client categories. Personal Brands & Creators leads;
+    Car & Transport sits at the back. Anything not listed falls in alphabetically
+    after the known ones, so a new category added in edit mode still appears.
+  */
+  const CATEGORY_ORDER = [
+    'Personal Brands & Creators',
+    'Food & Beverage',
+    'Community & Islamic Organisations',
+    'Clothing & Merch',
+    'Fitness & Sport',
+    'Education',
+    'Professional Services',
+    'Photography',
+    'Car & Transport',
+  ];
+  const categoryRank = (name) => {
+    const index = CATEGORY_ORDER.indexOf(name);
+    return index === -1 ? CATEGORY_ORDER.length : index;
+  };
+
   /* Group clients by industry for the unravel panels. */
   const industries = [...clients.reduce((map, client) => {
     const key = client.category || 'Uncategorised';
     map.set(key, [...(map.get(key) ?? []), client]);
     return map;
-  }, new Map())].sort((a, b) => a[0].localeCompare(b[0]));
+  }, new Map())].sort((a, b) => categoryRank(a[0]) - categoryRank(b[0]) || a[0].localeCompare(b[0]));
 
   const resultsRow = stats.length
     ? stats.map((stat) =>
@@ -607,8 +636,8 @@ async function renderOurWork() {
       </div>
     </div>`;
 
-  const industryPanel = ([name, group]) => `
-    <div class="disclosure">
+  const industryPanel = ([name, group], index) => `
+    <div class="disclosure" data-reveal style="--i:${index}">
       <button type="button" class="disclosure-head" data-toggle="industry-${esc(name)}"
               aria-expanded="false" aria-controls="industry-${esc(name)}">
         <span class="disclosure-title">${esc(name)}</span>
@@ -630,8 +659,8 @@ async function renderOurWork() {
       </div>
     </div>`;
 
-  const photoCategory = (category) => `
-    <div class="disclosure">
+  const photoCategory = (category, index) => `
+    <div class="disclosure" data-reveal style="--i:${index}">
       <button type="button" class="disclosure-head" data-toggle="photo-${esc(category.id)}"
               aria-expanded="false" aria-controls="photo-${esc(category.id)}">
         <span class="disclosure-title">${esc(category.name)}</span>
@@ -652,7 +681,7 @@ async function renderOurWork() {
     </div>`;
 
   const siteCard = (entry) => `
-    <article class="glass-card">
+    <article class="glass-card" data-reveal>
       ${mediaTile({ imageUrl: entry.screenshotUrl, title: entry.name, ratio: 'wide', empty: 'Screenshot coming soon' })}
       <div style="margin-top:1rem">
         <h3 style="font-family:var(--font-display);font-weight:500;font-size:1.0625rem;margin:0 0 0.4rem">${esc(entry.name)}</h3>
@@ -669,7 +698,9 @@ async function renderOurWork() {
     <section class="section" id="results">
       <div class="shell">
         <div class="glow" style="--glow-w:34rem;--glow-h:26rem;--glow-a:0.28;left:-10rem;top:-6rem"></div>
-        ${eyebrow('Results', 'arrowUp')}
+        <h2 class="display display--lg" data-reveal style="margin-bottom:clamp(1.75rem,4vw,2.75rem)">
+          Our Drive? Results.
+        </h2>
         <div class="results-row" data-reveal>${resultsRow}</div>
         <div style="margin-top:1.5rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center">
           <button type="button" class="link-arrow" data-results-modal><span>See more</span>${icon('arrowRight')}</button>
@@ -708,8 +739,16 @@ async function renderOurWork() {
             ? industries.map(industryPanel).join('')
             : emptyState('No clients yet', 'Add clients in edit mode and they will group by industry here.')}
 
-          <!-- R9: the full client index, alongside the showcase above. -->
+          <!-- The full client index, behind its own button so it doesn't
+               overwhelm the showcase above. -->
           <div class="all-clients">
+            <button type="button" class="btn btn--ghost" data-toggle="all-clients"
+                    aria-expanded="false" aria-controls="all-clients">
+              ${icon('layers')} View all clients
+            </button>
+          </div>
+
+          <div class="disclosure-panel all-clients-panel" id="all-clients" hidden data-animate="true">
             <div class="section-head" style="margin-bottom:1.5rem">
               <div>
                 ${eyebrow('All clients', 'layers')}
@@ -720,7 +759,7 @@ async function renderOurWork() {
             </div>
 
             ${industries.map(([name, group]) => `
-              <div class="client-index">
+              <div class="client-index" data-reveal>
                 <h4 class="client-index-head">
                   <span>${esc(name)}</span>
                   <span class="tiny">${group.length}</span>
@@ -803,8 +842,8 @@ async function renderOurWork() {
         ${eyebrow('Branding', 'diamond')}
         <h2 class="display display--lg" data-reveal style="margin-bottom:2.5rem">Elevating your brand.</h2>
         ${branding.length
-          ? `<div class="branding-masonry">${branding.map((item) => `
-              <figure style="margin:0">
+          ? `<div class="branding-masonry">${branding.map((item, index) => `
+              <figure data-reveal style="--i:${index}">
                 ${mediaTile({ imageUrl: item.mediaUrl, title: item.clientName || item.type, ratio: 'square' })}
                 ${item.clientName ? `<figcaption class="tiny" style="margin-top:0.4rem">${esc(item.clientName)}</figcaption>` : ''}
               </figure>`).join('')}</div>`
@@ -868,8 +907,8 @@ async function renderAbout() {
   const settings = await load('settings');
   const { founded, clientsCount, teamCount } = settings.aboutStats ?? {};
 
-  const stat = (num, label) => `
-    <div class="glass-card stat">
+  const stat = (num, label, index = 0) => `
+    <div class="glass-card stat" data-reveal style="--i:${index}">
       <span class="num">${esc(num || '—')}</span>
       <span class="label micro">${esc(label)}</span>
     </div>`;
@@ -894,10 +933,10 @@ async function renderAbout() {
           ${esc(clientsCount || '50')} clients.
         </p>
 
-        <div class="stat-row">
-          ${stat(founded, 'Founded')}
-          ${stat(clientsCount ? `${clientsCount}+` : '', 'Clients')}
-          ${stat(teamCount, 'Team members')}
+        <div class="stat-row" data-reveal>
+          ${stat(founded, 'Founded', 0)}
+          ${stat(clientsCount ? `${clientsCount}+` : '', 'Clients', 1)}
+          ${stat(teamCount, 'Team members', 2)}
         </div>
         ${editOnly(`
         <div>
@@ -962,7 +1001,7 @@ async function renderContact() {
           <div>${whatsapp}</div>
         </div>
 
-        <div class="or-divider" aria-hidden="true"><span>Or</span></div>
+        <div class="or-divider" aria-hidden="true" data-reveal><span>Or</span></div>
 
         <div class="stack-2" data-reveal style="--i:1">
           <form class="editor-form" id="contact-form" novalidate>
@@ -1197,11 +1236,11 @@ async function renderHiring() {
           <p class="tiny" style="margin:-1.5rem 0 0">The principles that guide how we work and collaborate.</p>
           <ol class="values-list">
             ${VALUES.map((value, index) => `
-              <li><span class="value-num">${String(index + 1).padStart(2, '0')}</span>${esc(value)}</li>`).join('')}
+              <li data-reveal style="--i:${index}"><span class="value-num">${String(index + 1).padStart(2, '0')}</span>${esc(value)}</li>`).join('')}
           </ol>
         </div>
 
-        <div class="stack" style="margin-top:2.5rem">
+        <div class="stack" data-reveal style="margin-top:2.5rem">
           <p class="lede">If you want to build something you're proud of — and help others do the same — we'd like to meet you.</p>
           <div><a class="btn btn--gold" href="#vacancies">Join us ${icon('arrowRight')}</a></div>
         </div>
@@ -1213,7 +1252,7 @@ async function renderHiring() {
         ${eyebrow('Open roles', 'briefcase')}
         <h2 class="display display--lg" data-reveal style="margin-bottom:2rem">Vacancies.</h2>
 
-        <div class="job-filters">
+        <div class="job-filters" data-reveal>
           <div class="field">
             <label for="job-q">Keyword</label>
             <input id="job-q" type="search" data-filter="job-q" placeholder="Role, skill, keyword">
@@ -1465,6 +1504,15 @@ function mountChrome() {
       } else {
         panel.hidden = open;
       }
+
+      /*
+        A [data-reveal] inside a hidden panel can never intersect, so its reveal
+        would never fire and it would open as blank space. Anything revealed by
+        opening a panel is, by definition, already "in view" — mark it shown.
+      */
+      if (!open) {
+        $$('[data-reveal]', panel).forEach((node) => { node.dataset.shown = 'true'; });
+      }
     });
   });
 
@@ -1585,9 +1633,18 @@ function mountCarousel(root) {
   const next = $('.carousel-nav', root);
   if (!track) return;
 
+  /*
+    The track holds the cards twice. `loopWidth` is the width of one pass, so
+    once the drift passes it we subtract that width and the row appears to run
+    forever without a jump.
+  */
+  const looping = track.dataset.autoscroll === 'true';
+  const loopWidth = () => track.scrollWidth / 2;
+
   const updateEnd = () => {
-    const atEnd = track.scrollLeft + track.clientWidth >= track.scrollWidth - 8;
-    root.dataset.atEnd = String(atEnd);
+    // With a seamless loop there is no "end" to fade against.
+    if (looping) { root.dataset.atEnd = 'false'; return; }
+    root.dataset.atEnd = String(track.scrollLeft + track.clientWidth >= track.scrollWidth - 8);
   };
 
   const step = () => Math.max(track.clientWidth * 0.8, 260);
@@ -1595,6 +1652,51 @@ function mountCarousel(root) {
 
   track.addEventListener('scroll', updateEnd, { passive: true });
   updateEnd();
+
+  /* ---- Slow continuous drift -------------------------------------------- */
+  if (looping && !prefersReducedMotion()) {
+    const SPEED = 14;                 // px per second — a slow walk, not a slide
+    let paused = false;
+    let last = performance.now();
+    let frame = 0;
+    // Sub-pixel carry, or a 14px/s speed would floor to zero every frame.
+    let carry = 0;
+
+    const tick = (now) => {
+      const dt = Math.min((now - last) / 1000, 0.1);
+      last = now;
+
+      if (!paused && !track.dataset.dragging) {
+        carry += SPEED * dt;
+        const whole = Math.floor(carry);
+        if (whole) {
+          carry -= whole;
+          track.scrollLeft += whole;
+          const width = loopWidth();
+          if (width && track.scrollLeft >= width) track.scrollLeft -= width;
+        }
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+
+    const pause = () => { paused = true; };
+    const resume = () => { last = performance.now(); paused = false; };
+
+    // Stop while someone is reading, interacting, or the tab is hidden.
+    track.addEventListener('pointerenter', pause);
+    track.addEventListener('pointerleave', resume);
+    track.addEventListener('pointerdown', pause);
+    track.addEventListener('focusin', pause);
+    track.addEventListener('focusout', resume);
+    const onVisibility = () => (document.hidden ? pause() : resume());
+    document.addEventListener('visibilitychange', onVisibility);
+
+    registerCleanup(() => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener('visibilitychange', onVisibility);
+    });
+  }
 
   /* Mouse drag. Touch is left to the browser's own momentum scrolling. */
   let dragging = false;

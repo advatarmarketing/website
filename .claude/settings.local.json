@@ -57,7 +57,31 @@
       "Bash(python3 -c \"import sys,json;s=json.load\\(sys.stdin\\)['settings'];print\\('cleared:', not any\\([s['logoLightUrl'],s['logoDarkUrl'],s['textureUrl']]\\)\\)\")",
       "Bash(node theme-shots.mjs light L2 1440 900 \"/about@520\" \"/look-inside@1500\")",
       "Bash(node theme-shots.mjs dark D2 1440 900 \"/our-work@2400\")",
-      "Bash(node theme-shots.mjs light LM 390 844 \"/@0\")"
+      "Bash(node theme-shots.mjs light LM 390 844 \"/@0\")",
+      "Bash(ls -laht ~/Downloads/ 2>/dev/null | head -25; echo \"--- webp/png/jpg in Downloads \\(recent\\) ---\"; find ~/Downloads -maxdepth 1 \\\\\\( -iname \"*.webp\" -o -iname \"*grain*\" -o -iname \"*noise*\" \\\\\\) -mtime -14 2>/dev/null | head -20)",
+      "Bash(sips -g pixelWidth -g pixelHeight -g format Texture-Fabrik-Film-Grain_03.webp)",
+      "Bash(python3 -c \"import PIL; print\\('PIL', PIL.__version__\\)\")",
+      "Bash(sips -c 1400 1400 ~/Downloads/Texture-Fabrik-Film-Grain_03.webp --out grain-crop.png)",
+      "Bash(sips -z 700 700 grain-crop.png --out grain-700.png)",
+      "Bash(sips -s format webp -s formatOptions 72 grain-700.png --out grain.webp)",
+      "Bash(sips -g pixelWidth -g pixelHeight grain.webp)",
+      "Bash(sips -s format png ~/Downloads/Texture-Fabrik-Film-Grain_03.webp --out grain-full.png)",
+      "Bash(sips -c 1400 1400 grain-full.png --out grain-crop.png)",
+      "Bash(which cwebp *)",
+      "Bash(ffmpeg -hide_banner -loglevel error -y -i ~/Downloads/Texture-Fabrik-Film-Grain_03.webp -vf \"crop=1600:1600:2200:1200,scale=600:600:flags=lanczos,format=gray\" -c:v libwebp -quality 76 -compression_level 6 grain-tile.webp)",
+      "Bash(ffmpeg -hide_banner -loglevel error -y -i ~/Downloads/Texture-Fabrik-Film-Grain_03.webp -vf \"crop=1600:1600:2200:1200,scale=600:600:flags=lanczos,format=gray\" -c:v libwebp -quality 60 grain-tile-q60.webp)",
+      "Bash(curl -s -o /dev/null -w \"grain asset: %{http_code} %{size_download} bytes\\\\n\" http://localhost:3212/assets/grain.png)",
+      "Bash(node theme-shots.mjs light G 1440 900 \"/@0\" \"/our-work@0\")",
+      "Bash(node theme-shots.mjs dark GD 1440 900 \"/@0\")",
+      "Bash(ffmpeg -hide_banner -loglevel error -y -i ~/Downloads/Texture-Fabrik-Film-Grain_03.webp -vf \"crop=512:512:2400:1400,format=gray,eq=contrast=2.4\" -c:v png -pred mixed grain-hc.png)",
+      "Bash(awk '{print $5}')",
+      "Bash(python3 -c ' *)",
+      "Bash(node rm-test.mjs)",
+      "Bash(node census.mjs)",
+      "Bash(node errcheck.mjs)",
+      "Bash(node theme-shots.mjs light F 1440 900 \"/our-work@0\")",
+      "Bash(sed -i '' \"s|http://localhost:3212/our-work|http://localhost:3212/our-work|\" allclients-shot.mjs)",
+      "Bash(node allclients-shot.mjs)"
     ]
   }
 }
