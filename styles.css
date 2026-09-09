@@ -6,8 +6,14 @@
 
 /* --------------------------------------------------------------- Tokens --- */
 
+/*
+  Two themes. Dark is the base declaration; `:root[data-theme="light"]` swaps the
+  same token names. An inline script in <head> stamps the attribute from
+  localStorage before first paint, so there is no flash of the wrong theme.
+  Light is the default when nothing is stored.
+*/
 :root {
-  /* Palette */
+  /* Palette — dark */
   --bg:            #0A0908;
   --bg-elevated:   #131110;
   --gold-1:        #F2A93B;
@@ -20,8 +26,29 @@
   /* Derived */
   --hairline:      rgba(255, 255, 255, 0.07);
   --hairline-soft: rgba(255, 255, 255, 0.045);
-  --text-faint:    rgba(167, 158, 144, 0.55);
+  /* Solid, not a low alpha: 5.3:1 on --bg, so 11px labels still clear AA. */
+  --text-faint:    #8B8377;
   --gold-glow:     rgba(242, 169, 59, 0.30);
+  /* --gold-1 is the accent; --gold-text is the accent that is safe on TEXT.
+     They are identical on dark, where --gold-1 already reaches ~10:1. */
+  --gold-text:     #F2A93B;
+
+  /* Grain reads stronger on dark, so each theme sets its own weight + blend. */
+  --grain-opacity: 0.12;
+  --grain-blend:   overlay;
+
+  /* Ambient texture strength behind sections. */
+  --ambient-a:     0.30;
+  --texture-a:     0.16;
+  --glow-scale:    1;
+
+  --scrim:         rgba(10, 9, 8, 0.85);
+  --nav-scrim:     rgba(10, 9, 8, 0.72);
+  --surface-1:     rgba(19, 17, 16, 0.92);
+  --overlay:       rgba(6, 5, 4, 0.75);
+  --shadow-card:   0 18px 50px -30px rgba(0, 0, 0, 0.9);
+
+  /* ---- Theme-independent below: type, rhythm, motion, layers ------------- */
 
   /* Type */
   --font-display: 'General Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -32,11 +59,13 @@
   --section-y: clamp(5rem, 12vw, 11rem);
   --max-w: 1440px;
 
-  /* Motion — 150–300ms, meaningful only */
+  /* Motion — 150–300ms for state changes; 400–600ms for scroll reveals */
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --fast: 150ms;
   --mid:  220ms;
   --slow: 300ms;
+  --reveal: 560ms;
 
   /* Layers */
   --z-grid: 0;
@@ -46,6 +75,43 @@
   --z-toast: 120;
 
   color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg:            #FAF7F1;
+  --bg-elevated:   #F1EBDE;
+  --gold-1:        #C97A2E;
+  --gold-2:        #8F5620;
+  --text-hi:       #1B1712;
+  --text-lo:       #6E6558;
+  --glass-fill:    rgba(20, 16, 10, 0.045);
+  --glass-border:  rgba(20, 16, 10, 0.09);
+
+  --hairline:      rgba(20, 16, 10, 0.10);
+  --hairline-soft: rgba(20, 16, 10, 0.06);
+  /* 4.6:1 on --bg. */
+  --text-faint:    #767061;
+  --gold-glow:     rgba(201, 122, 46, 0.22);
+  /* #C97A2E is only 3.1:1 here — fine for large display text and accents,
+     but small text needs the deeper tone (5.6:1). */
+  --gold-text:     #8F5620;
+
+  /* Soft-light + lower opacity, or grain reads as dirt on a warm near-white. */
+  --grain-opacity: 0.06;
+  --grain-blend:   soft-light;
+
+  --ambient-a:     0.55;
+  --texture-a:     0.10;
+  /* Warmth rather than a glow effect. */
+  --glow-scale:    0.42;
+
+  --scrim:         rgba(250, 247, 241, 0.85);
+  --nav-scrim:     rgba(250, 247, 241, 0.78);
+  --surface-1:     rgba(252, 250, 246, 0.95);
+  --overlay:       rgba(38, 29, 18, 0.38);
+  --shadow-card:   0 18px 40px -32px rgba(60, 40, 15, 0.45);
 }
 
 /* ----------------------------------------------------------------- Base --- */
@@ -169,6 +235,25 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .muted { color: var(--text-lo); }
 .tiny { font-size: 0.8125rem; line-height: 1.5; color: var(--text-lo); }
 
+/* Inline link inside a sentence — underlined so it doesn't rely on colour. */
+.text-link {
+  color: var(--gold-text);
+  text-decoration: underline;
+  text-underline-offset: 0.22em;
+  text-decoration-thickness: 1px;
+  transition: color var(--mid) var(--ease);
+}
+.text-link:hover { color: var(--gold-2); }
+
+/* The Arabic word set inline, sized up so it stays prominent in the sentence. */
+.ihsan-inline {
+  font-size: 1.5em;
+  line-height: 1;
+  vertical-align: -0.12em;
+  color: var(--gold-1);
+  margin-inline: 0.12em;
+}
+
 /* ------------------------------------------------------- Grain + grid ----- */
 
 .grain-defs { position: absolute; width: 0; height: 0; }
@@ -179,8 +264,42 @@ button, input, select, textarea { font: inherit; color: inherit; }
   z-index: var(--z-grain);
   pointer-events: none;
   filter: url(#grain-filter);
-  opacity: 0.06;
-  mix-blend-mode: overlay;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
+}
+
+/*
+  Ambient texture. Nothing on the site sits on flat colour — this fixed layer
+  carries a soft warm gradient mesh across the whole page, behind everything.
+  When settings.textureUrl is set, a blurred, dimmed still from real work is
+  layered over the mesh instead.
+*/
+.ambient {
+  position: fixed;
+  inset: -10%;
+  z-index: -3;
+  pointer-events: none;
+  opacity: var(--ambient-a);
+  background:
+    radial-gradient(38% 44% at 12% 18%, rgba(242, 169, 59, 0.18), transparent 70%),
+    radial-gradient(44% 40% at 86% 30%, rgba(201, 122, 46, 0.20), transparent 72%),
+    radial-gradient(50% 46% at 62% 82%, rgba(180, 104, 40, 0.16), transparent 74%),
+    radial-gradient(36% 38% at 26% 70%, rgba(242, 169, 59, 0.12), transparent 72%);
+  filter: blur(70px);
+}
+
+.ambient-still {
+  position: fixed;
+  inset: -8%;
+  z-index: -4;
+  pointer-events: none;
+  width: auto;
+  height: auto;
+  min-width: 116%;
+  min-height: 116%;
+  object-fit: cover;
+  opacity: var(--texture-a);
+  filter: blur(48px) saturate(120%);
 }
 
 .grid-rules {
@@ -262,14 +381,23 @@ button, input, select, textarea { font: inherit; color: inherit; }
   pointer-events: none;
   width: var(--glow-w, 40rem);
   height: var(--glow-h, 40rem);
+  /* --glow-scale tones the whole effect down in light mode, where it should
+     read as warmth rather than as a dark-mode glow. */
   background: radial-gradient(
     circle at center,
-    rgba(242, 169, 59, var(--glow-a, 0.45)) 0%,
-    rgba(201, 122, 46, calc(var(--glow-a, 0.45) * 0.5)) 38%,
+    rgba(242, 169, 59, calc(var(--glow-a, 0.45) * var(--glow-scale))) 0%,
+    rgba(201, 122, 46, calc(var(--glow-a, 0.45) * var(--glow-scale) * 0.5)) 38%,
     transparent 70%
   );
   filter: blur(80px);
   border-radius: 50%;
+  /* Continuous slow drift so the page is never completely static (R10). */
+  animation: glow-drift 19s ease-in-out infinite alternate;
+}
+
+@keyframes glow-drift {
+  from { transform: translate3d(-2%, -1.5%, 0) scale(1); }
+  to   { transform: translate3d(2.5%, 2%, 0) scale(1.08); }
 }
 
 /* --------------------------------------------------------------- Icons --- */
@@ -357,7 +485,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   transition: color var(--mid) var(--ease);
 }
 .link-arrow .icon { transition: transform var(--mid) var(--ease); }
-.link-arrow:hover { color: var(--gold-1); }
+.link-arrow:hover { color: var(--gold-text); }
 .link-arrow:hover .icon { transform: translateX(3px); }
 
 /* Small square icon-only control (disclosure arrows, close buttons). */
@@ -373,8 +501,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
   cursor: pointer;
   transition: color var(--mid) var(--ease), border-color var(--mid) var(--ease);
 }
-.icon-btn:hover { color: var(--gold-1); border-color: rgba(242, 169, 59, 0.35); }
-.icon-btn[aria-expanded='true'] { color: var(--gold-1); }
+.icon-btn:hover { color: var(--gold-text); border-color: rgba(242, 169, 59, 0.35); }
+.icon-btn[aria-expanded='true'] { color: var(--gold-text); }
 .icon-btn[aria-expanded='true'] .icon { transform: rotate(90deg); }
 .icon-btn .icon { transition: transform var(--mid) var(--ease); }
 
@@ -466,11 +594,13 @@ a.glass-card:hover,
   background:
     linear-gradient(150deg, rgba(242, 169, 59, 0.07), transparent 60%),
     var(--bg-elevated);
-  color: var(--text-faint);
+  /* --text-lo, not --text-faint: this label sits on --bg-elevated, where the
+     fainter tone drops to 4.15:1. */
+  color: var(--text-lo);
   text-align: center;
   padding: 1rem;
 }
-.media--empty .icon { width: 1.5rem; height: 1.5rem; }
+.media--empty .icon { width: 1.5rem; height: 1.5rem; opacity: 0.75; }
 .media--empty span { font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase; }
 
 /* --------------------------------------------------------- Empty states --- */
@@ -501,7 +631,7 @@ a.glass-card:hover,
   border-bottom: 1px solid transparent;
 }
 .nav[data-scrolled='true'] {
-  background: rgba(10, 9, 8, 0.72);
+  background: var(--nav-scrim);
   backdrop-filter: blur(20px) saturate(140%);
   -webkit-backdrop-filter: blur(20px) saturate(140%);
   border-bottom-color: var(--hairline);
@@ -528,6 +658,9 @@ a.glass-card:hover,
 .brand svg { width: 22px; height: 24px; }
 .brand-word { display: none; }
 @media (min-width: 560px) { .brand-word { display: inline; } }
+
+/* A real logo file, once one is set in settings. */
+.brand-logo { height: 26px; width: auto; object-fit: contain; }
 
 /* Reference nav: small uppercase items separated by commas. */
 .nav-links {
@@ -557,7 +690,7 @@ a.glass-card:hover,
   transition: color var(--mid) var(--ease);
 }
 .nav-links a:hover { color: var(--text-hi); }
-.nav-links a[aria-current='page'] { color: var(--gold-1); }
+.nav-links a[aria-current='page'] { color: var(--gold-text); }
 
 .nav-actions { display: flex; align-items: center; gap: 0.6rem; margin-left: auto; }
 
@@ -568,34 +701,10 @@ a.glass-card:hover,
 */
 .nav-login-slot { display: contents; }
 
+/* The menu panel is reachable at every width (R3), not only on mobile. */
 .nav-toggle { display: inline-flex; }
-@media (min-width: 900px) { .nav-toggle { display: none; } }
 
-/* Mobile menu */
-.nav-menu {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  display: grid;
-  align-content: center;
-  gap: 0.25rem;
-  padding: var(--gutter);
-  background: rgba(10, 9, 8, 0.94);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-}
-.nav-menu a {
-  font-family: var(--font-display);
-  font-weight: 300;
-  font-size: clamp(1.75rem, 8vw, 2.5rem);
-  letter-spacing: -0.03em;
-  padding-block: 0.4rem;
-  color: var(--text-lo);
-  transition: color var(--mid) var(--ease);
-}
-.nav-menu a:hover,
-.nav-menu a[aria-current='page'] { color: var(--text-hi); }
-.nav-menu .nav-menu-close { position: absolute; top: 1.1rem; right: var(--gutter); }
+/* Nav menu overlay lives in the 'Nav menu (R3)' section below. */
 
 /* ============================================================= Hero ======= */
 
@@ -654,6 +763,63 @@ a.glass-card:hover,
     /* 5. faintest spill back across the centre */
     radial-gradient(70% 90% at 58% 50%, rgba(150, 78, 24, 0.34), transparent 70%),
     var(--bg);
+}
+
+/*
+  Light-mode hero. Same composition — dark-to-light on the left, a shaft and
+  amber falloff on the right — but the "dark" side becomes the warm near-white
+  and the shaft is a saturated gold rather than a white-hot core, so it reads as
+  daylight through a gap instead of a glow effect.
+*/
+:root[data-theme='light'] .hero-light {
+  background:
+    linear-gradient(90deg,
+      var(--bg) 0%,
+      var(--bg) 32%,
+      rgba(250, 247, 241, 0.94) 43%,
+      rgba(250, 247, 241, 0.55) 52%,
+      transparent 62%),
+    linear-gradient(90deg,
+      transparent 55%,
+      rgba(230, 150, 55, 0.16) 60%,
+      rgba(255, 206, 130, 0.52) 63.5%,
+      rgba(255, 238, 205, 0.92) 65%,
+      rgba(255, 206, 130, 0.52) 66.5%,
+      rgba(230, 150, 55, 0.18) 71%,
+      transparent 80%),
+    radial-gradient(38% 78% at 65% 50%, rgba(233, 150, 48, 0.42), transparent 72%),
+    radial-gradient(58% 96% at 84% 52%, rgba(201, 122, 46, 0.40), transparent 74%),
+    radial-gradient(70% 90% at 58% 50%, rgba(214, 158, 96, 0.26), transparent 70%),
+    var(--bg);
+}
+
+:root[data-theme='light'] .hero::after {
+  background: linear-gradient(to bottom,
+    rgba(250, 247, 241, 0.5) 0%, transparent 22%,
+    transparent 72%, rgba(250, 247, 241, 0.8) 100%);
+}
+
+@media (max-width: 768px) {
+  :root[data-theme='light'] .hero-light {
+    background:
+      linear-gradient(180deg,
+        var(--bg) 0%, var(--bg) 42%,
+        rgba(250, 247, 241, 0.95) 54%,
+        rgba(250, 247, 241, 0.6) 64%,
+        transparent 76%),
+      linear-gradient(90deg,
+        transparent 58%,
+        rgba(230, 150, 55, 0.16) 64%,
+        rgba(255, 206, 130, 0.5) 69%,
+        rgba(255, 238, 205, 0.9) 71%,
+        rgba(255, 206, 130, 0.5) 73%,
+        rgba(230, 150, 55, 0.18) 80%,
+        transparent 92%),
+      radial-gradient(60% 46% at 72% 76%, rgba(233, 150, 48, 0.42), transparent 74%),
+      radial-gradient(90% 56% at 62% 92%, rgba(201, 122, 46, 0.40), transparent 76%),
+      var(--bg);
+  }
+  :root[data-theme='light'] .hero-foot p { text-shadow: 0 1px 12px rgba(250, 247, 241, 0.9); }
 }
 
 /*
@@ -825,7 +991,7 @@ a.glass-card:hover,
   font-family: var(--font-display);
   font-size: 1.5rem;
   font-weight: 400;
-  color: var(--gold-1);
+  color: var(--gold-text);
   letter-spacing: -0.02em;
 }
 
@@ -867,7 +1033,7 @@ a.glass-card:hover,
   cursor: pointer;
   color: inherit;
 }
-.disclosure-head:hover .disclosure-title { color: var(--gold-1); }
+.disclosure-head:hover .disclosure-title { color: var(--gold-text); }
 .disclosure-title {
   font-family: var(--font-display);
   font-weight: 400;
@@ -911,6 +1077,96 @@ a.glass-card:hover,
   padding: 0.25rem 0.65rem;
 }
 
+/* ================================== All-clients index (R9) =============== */
+
+.all-clients {
+  margin-top: clamp(3rem, 7vw, 5rem);
+  padding-top: clamp(2rem, 5vw, 3rem);
+  border-top: 1px solid var(--hairline);
+}
+
+.client-index + .client-index { margin-top: 2rem; }
+
+.client-index-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 0.35rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--hairline);
+  font-family: var(--font-ui);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold-text);
+}
+
+.client-index-list { margin: 0; padding: 0; list-style: none; }
+.client-index-list > li { border-bottom: 1px solid var(--hairline-soft); }
+
+.client-index-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.85rem 0;
+  background: none;
+  border: 0;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: color var(--mid) var(--ease), padding-left var(--mid) var(--ease);
+}
+.client-index-row:hover { color: var(--gold-text); padding-left: 0.4rem; }
+.client-index-row[aria-expanded='true'] { color: var(--gold-text); }
+.client-index-row[aria-expanded='true'] .icon { transform: rotate(90deg); }
+.client-index-row .icon { transition: transform var(--mid) var(--ease); flex: none; color: var(--text-lo); }
+
+.client-index-name {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(0.9375rem, 1.4vw, 1.0625rem);
+  letter-spacing: -0.015em;
+}
+.client-index-count { margin-left: auto; white-space: nowrap; }
+
+.tag--soft {
+  border-style: dashed;
+  color: var(--text-faint);
+  font-size: 0.625rem;
+}
+@media (max-width: 640px) {
+  .client-index-row { flex-wrap: wrap; gap: 0.4rem 0.75rem; }
+  .client-index-count { margin-left: 0; width: 100%; }
+  .tag--soft { max-width: 100%; }
+}
+
+/* ============================================ Case studies (R8) ========== */
+
+.case-study {
+  display: grid;
+  gap: 0.85rem;
+  padding-bottom: 1.75rem;
+  border-bottom: 1px solid var(--hairline);
+}
+.case-study:last-child { border-bottom: 0; padding-bottom: 0; }
+.case-study-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+.case-study-head h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(1.125rem, 2vw, 1.5rem);
+  letter-spacing: -0.025em;
+}
+
 /* ============================================================ About ======= */
 
 .quote-block { position: relative; padding-block: clamp(1rem, 3vw, 2rem); }
@@ -938,7 +1194,9 @@ a.glass-card:hover,
   font-size: clamp(2.25rem, 5vw, 3.25rem);
   letter-spacing: -0.04em;
   line-height: 1;
-  background: linear-gradient(135deg, var(--gold-1), var(--gold-2));
+  /* Starts at --gold-text, not --gold-1: on a light glass card the lighter gold
+     measures 2.84:1, just under the 3:1 floor for large text. */
+  background: linear-gradient(135deg, var(--gold-text), var(--gold-2));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -1032,7 +1290,7 @@ a.glass-card:hover,
 
 .form-status { font-size: 0.8125rem; min-height: 1.5rem; }
 .form-status[data-state='error'] { color: #FF9A8B; }
-.form-status[data-state='ok'] { color: var(--gold-1); }
+.form-status[data-state='ok'] { color: var(--gold-text); }
 
 /* ======================================================= Look Inside ===== */
 
@@ -1045,33 +1303,7 @@ a.glass-card:hover,
   .timeline { grid-template-columns: minmax(0, 16rem) minmax(0, 1fr); align-items: start; }
 }
 
-.timeline-rail { display: none; }
-@media (min-width: 900px) {
-  .timeline-rail {
-    display: grid;
-    gap: 0.5rem;
-    position: sticky;
-    top: 8rem;
-  }
-}
-.timeline-rail li { display: flex; align-items: center; gap: 0.85rem; list-style: none; }
-.timeline-rail .dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: var(--hairline);
-  flex: none;
-  transition: background var(--mid) var(--ease), box-shadow var(--mid) var(--ease);
-}
-.timeline-rail .rail-label {
-  font-size: 0.75rem;
-  color: var(--text-faint);
-  transition: color var(--mid) var(--ease);
-}
-.timeline-rail li[data-active='true'] .dot {
-  background: var(--gold-1);
-  box-shadow: 0 0 0 4px rgba(242, 169, 59, 0.15);
-}
-.timeline-rail li[data-active='true'] .rail-label { color: var(--text-hi); }
+/* Progress rail lives in the 'Look Inside progress rail (R7)' section below. */
 
 .timeline-steps { display: grid; gap: clamp(3rem, 10vw, 7rem); }
 
@@ -1084,7 +1316,7 @@ a.glass-card:hover,
 .timeline-step .step-num {
   font-family: var(--font-display);
   font-size: 0.875rem;
-  color: var(--gold-1);
+  color: var(--gold-text);
   letter-spacing: 0.08em;
 }
 .timeline-step h3 {
@@ -1124,7 +1356,7 @@ a.glass-card:hover,
   letter-spacing: -0.02em;
 }
 .values-list li:last-child { border-bottom: 1px solid var(--hairline); }
-.values-list .value-num { font-family: var(--font-ui); font-size: 0.75rem; color: var(--gold-1); letter-spacing: 0.08em; }
+.values-list .value-num { font-family: var(--font-ui); font-size: 0.75rem; color: var(--gold-text); letter-spacing: 0.08em; }
 
 /* Job board */
 .job-filters {
@@ -1162,7 +1394,7 @@ a.glass-card:hover,
   margin: 0;
   transition: color var(--mid) var(--ease);
 }
-.job-item:hover h3 { color: var(--gold-1); }
+.job-item:hover h3 { color: var(--gold-text); }
 .job-meta { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; font-size: 0.8125rem; color: var(--text-lo); }
 .job-meta span { display: inline-flex; align-items: center; gap: 0.35rem; }
 
@@ -1175,7 +1407,7 @@ a.glass-card:hover,
   display: grid;
   place-items: center;
   padding: clamp(1rem, 4vw, 3rem);
-  background: rgba(6, 5, 4, 0.75);
+  background: var(--overlay);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   animation: fade var(--mid) var(--ease);
@@ -1187,7 +1419,7 @@ a.glass-card:hover,
   max-height: min(88vh, 52rem);
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: rgba(19, 17, 16, 0.92);
+  background: var(--surface-1);
   backdrop-filter: blur(20px) saturate(140%);
   -webkit-backdrop-filter: blur(20px) saturate(140%);
   border: 1px solid var(--glass-border);
@@ -1233,7 +1465,7 @@ a.glass-card:hover,
   gap: 0.75rem;
   padding: 0.85rem 1.15rem;
   border-radius: 14px;
-  background: rgba(19, 17, 16, 0.95);
+  background: var(--surface-1);
   border: 1px solid var(--glass-border);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -1259,7 +1491,7 @@ a.glass-card:hover,
   border-radius: 999px;
   border: 1px dashed rgba(242, 169, 59, 0.45);
   background: rgba(242, 169, 59, 0.08);
-  color: var(--gold-1);
+  color: var(--gold-text);
   font-size: 0.6875rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1279,14 +1511,14 @@ a.glass-card:hover,
   gap: 0.6rem;
   padding: 0.55rem 0.6rem 0.55rem 1.1rem;
   border-radius: 999px;
-  background: rgba(19, 17, 16, 0.92);
+  background: var(--surface-1);
   border: 1px solid rgba(242, 169, 59, 0.35);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--gold-1);
+  color: var(--gold-text);
 }
 
 /* Admin editor forms inside modals. */
@@ -1383,7 +1615,7 @@ a.glass-card:hover,
   border-radius: 999px;
   border: 1px solid var(--hairline-soft);
   background: transparent;
-  color: rgba(167, 158, 144, 0.4);
+  color: var(--text-faint);
   font-size: 0.6875rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -1391,6 +1623,308 @@ a.glass-card:hover,
   transition: color var(--mid) var(--ease), border-color var(--mid) var(--ease);
 }
 .webdev-pill:hover { color: var(--text-lo); border-color: var(--hairline); }
+
+/* ==================================================== Scroll reveals ===== */
+
+/*
+  Shared reveal primitive (R5). JS adds [data-reveal] to anything that should
+  animate in, and flips data-shown="true" via IntersectionObserver. The stagger
+  index is passed as --i so grouped items cascade.
+*/
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity var(--reveal) var(--ease-out) calc(var(--i, 0) * 70ms),
+    transform var(--reveal) var(--ease-out) calc(var(--i, 0) * 70ms);
+  will-change: opacity, transform;
+}
+[data-reveal][data-shown='true'] {
+  opacity: 1;
+  transform: none;
+}
+
+/* Hero parallax + hand-off. JS writes these from the scroll position. */
+.hero-media,
+.hero-light,
+.hero-hand { will-change: transform; }
+
+.hero-content,
+.hero-foot { will-change: opacity, transform; }
+
+/* ==================================================== Theme toggle ======= */
+
+.theme-toggle { position: relative; overflow: hidden; }
+.theme-toggle .icon {
+  position: absolute;
+  transition: transform var(--slow) var(--ease), opacity var(--slow) var(--ease);
+}
+.theme-toggle .icon-sun   { opacity: 0; transform: rotate(-90deg) scale(0.5); }
+.theme-toggle .icon-moon  { opacity: 1; transform: none; }
+:root[data-theme='light'] .theme-toggle .icon-sun  { opacity: 1; transform: none; }
+:root[data-theme='light'] .theme-toggle .icon-moon { opacity: 0; transform: rotate(90deg) scale(0.5); }
+
+/* ================================================= Nav menu (R3) ========= */
+
+.nav-menu {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 1.5rem;
+  padding: 1.1rem var(--gutter) clamp(2rem, 6vw, 3.5rem);
+  background: var(--scrim);
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  overflow-y: auto;
+  animation: fade var(--mid) var(--ease);
+}
+
+.nav-menu-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+/* One item per line, left-aligned, large and legible. */
+.nav-menu-links {
+  display: grid;
+  align-content: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nav-menu-links a {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  width: fit-content;
+  padding: 0.6rem 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(1.5rem, 4.4vw, 2rem);   /* 24–32px */
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--text-lo);
+  transition: color var(--mid) var(--ease), transform var(--mid) var(--ease);
+}
+.nav-menu-links a:hover { color: var(--text-hi); transform: translateX(4px); }
+.nav-menu-links .icon { width: 0.78em; height: 0.78em; opacity: 0.85; }
+
+/* Active page gets a gold accent bar and a colour shift — not colour alone. */
+.nav-menu-links a[aria-current='page'] {
+  color: var(--gold-1);
+  position: relative;
+  padding-left: 1.1rem;
+}
+.nav-menu-links a[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 1.1em;
+  border-radius: 2px;
+  background: var(--gold-1);
+}
+
+/* Utilities (theme toggle, reserved Login slot) sit below a divider. */
+.nav-menu-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--hairline);
+}
+.nav-menu-foot .micro { margin-right: auto; }
+
+/* ====================================== Recent Wins carousel (R4) ======== */
+
+.carousel { position: relative; }
+
+.carousel-track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 260px;
+  gap: 1rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  padding-block: 0.25rem;
+  padding-inline-end: 4rem;   /* room so the last card clears the fade */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  cursor: grab;
+}
+.carousel-track::-webkit-scrollbar { display: none; }
+.carousel-track > * { scroll-snap-align: start; }
+.carousel-track[data-dragging='true'] { cursor: grabbing; scroll-behavior: auto; scroll-snap-type: none; }
+.carousel-track[data-dragging='true'] * { pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) { .carousel-track { scroll-behavior: auto; } }
+
+/* Right-edge fade hinting there's more to the right. */
+.carousel::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; right: 0;
+  width: clamp(3rem, 8vw, 6rem);
+  pointer-events: none;
+  background: linear-gradient(to left, var(--bg), transparent);
+  opacity: 1;
+  transition: opacity var(--mid) var(--ease);
+}
+.carousel[data-at-end='true']::after { opacity: 0; }
+
+.carousel-nav {
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  z-index: 2;
+  background: var(--surface-1);
+  transition: opacity var(--mid) var(--ease), transform var(--fast) var(--ease);
+}
+.carousel-nav:hover { transform: translateY(-50%) scale(1.06); }
+.carousel[data-at-end='true'] .carousel-nav { opacity: 0; pointer-events: none; }
+
+/* Touch devices get swipe; the button is desktop-only affordance. */
+@media (hover: none) { .carousel-nav { display: none; } }
+
+/* ============================ Look Inside progress rail (R7) ============= */
+
+.timeline-rail { display: none; position: relative; }
+
+@media (min-width: 900px) {
+  .timeline-rail {
+    display: grid;
+    gap: 0;
+    position: sticky;
+    top: 8rem;
+    padding-left: 1.4rem;
+  }
+  /* The unfilled track. */
+  .timeline-rail::before {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 0.55rem;
+    bottom: 0.55rem;
+    width: 2px;
+    border-radius: 2px;
+    background: var(--hairline);
+  }
+  /* The fill, driven by --progress (0–1) from the scroll observer. */
+  .timeline-rail::after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 0.55rem;
+    width: 2px;
+    height: calc((100% - 1.1rem) * var(--progress, 0));
+    border-radius: 2px;
+    background: linear-gradient(to bottom, var(--gold-1), var(--gold-2));
+    transition: height var(--slow) var(--ease-out);
+  }
+}
+
+.timeline-rail li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding-block: 0.42rem;
+  list-style: none;
+}
+.timeline-rail .dot {
+  position: absolute;
+  left: -1.4rem;
+  width: 12px; height: 12px;
+  margin-left: 0;
+  border-radius: 50%;
+  border: 2px solid var(--hairline);
+  background: var(--bg);
+  flex: none;
+  transition: border-color var(--mid) var(--ease),
+              background var(--mid) var(--ease),
+              box-shadow var(--mid) var(--ease);
+}
+@media (max-width: 899px) { .timeline-rail .dot { position: static; } }
+
+.timeline-rail .rail-label {
+  font-size: 0.8125rem;
+  color: var(--text-faint);
+  transition: color var(--mid) var(--ease);
+}
+/* Steps already passed stay lit, so the rail reads as progress. */
+.timeline-rail li[data-passed='true'] .dot {
+  border-color: var(--gold-1);
+  background: var(--gold-1);
+}
+.timeline-rail li[data-passed='true'] .rail-label { color: var(--text-lo); }
+
+.timeline-rail li[data-active='true'] .dot {
+  border-color: var(--gold-1);
+  background: var(--gold-1);
+  box-shadow: 0 0 0 5px var(--gold-glow);
+}
+.timeline-rail li[data-active='true'] .rail-label { color: var(--text-hi); }
+
+/* ================================= Micro-interactions (R10) ============== */
+
+.glass-card { box-shadow: var(--shadow-card); }
+
+a.glass-card,
+.glass-card--interactive,
+.win-card,
+.job-item,
+.carousel-track > * {
+  transition:
+    transform var(--mid) var(--ease),
+    border-color var(--mid) var(--ease),
+    background var(--mid) var(--ease),
+    box-shadow var(--mid) var(--ease);
+}
+a.glass-card:hover,
+.glass-card--interactive:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 26px 60px -34px var(--gold-glow), var(--shadow-card);
+}
+a.glass-card:active, .glass-card--interactive:active { transform: translateY(-1px); }
+
+.win-card:hover .media,
+.carousel-track > *:hover .media {
+  border-color: rgba(242, 169, 59, 0.35);
+  transform: scale(1.012);
+}
+.win-card .media,
+.carousel-track > * .media { transition: transform var(--mid) var(--ease), border-color var(--mid) var(--ease); }
+
+.btn:hover { transform: translateY(-1px); }
+.btn--gold:hover { box-shadow: 0 0 54px -6px var(--gold-glow); }
+.icon-btn:hover { transform: scale(1.06); }
+.icon-btn { transition: color var(--mid) var(--ease), border-color var(--mid) var(--ease), transform var(--fast) var(--ease); }
+
+/*
+  Animated unravel for photography + websites (R10). The Video Marketing
+  industry panels stay instant, per the original brief — they use plain
+  [hidden] and are untouched by this.
+*/
+.disclosure-panel--animated {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  overflow: hidden;
+  transition: grid-template-rows var(--slow) var(--ease-out), opacity var(--slow) var(--ease-out);
+}
+.disclosure-panel--animated > * { min-height: 0; }
+.disclosure-panel--animated[data-open='true'] { grid-template-rows: 1fr; opacity: 1; }
 
 /* ================================================== Reduced motion ======= */
 
@@ -1401,6 +1935,18 @@ a.glass-card:hover,
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-  /* Scroll-driven reveals must not leave content invisible. */
+  /* Scroll-driven reveals must never leave content invisible. */
   .timeline-step { opacity: 1; transform: none; }
+  [data-reveal] { opacity: 1; transform: none; }
+
+  /* No parallax, no drift, no hover displacement. */
+  .glow { animation: none; }
+  .hero-media, .hero-light, .hero-hand { transform: none !important; }
+  .hero-content, .hero-foot { opacity: 1 !important; transform: none !important; }
+  a.glass-card:hover, .glass-card--interactive:hover,
+  .btn:hover, .icon-btn:hover, .nav-menu-links a:hover { transform: none; }
+  .win-card:hover .media, .carousel-track > *:hover .media { transform: none; }
+
+  /* Unravel opens instantly rather than animating. */
+  .disclosure-panel--animated { transition: none; }
 }

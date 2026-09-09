@@ -43,7 +43,21 @@
       "Bash(node shots.mjs \"http://localhost:3212/about\" finalabout 1440 900 0)",
       "Bash(node shots.mjs \"http://localhost:3212/about\" ihsan 1440 900 1500)",
       "Bash(git add *)",
-      "Bash(git -c 'user.name=Ar-Rayyan Monsur' -c user.email=edgwareyouthnw@gmail.com commit -q -m ' *)"
+      "Bash(git -c 'user.name=Ar-Rayyan Monsur' -c user.email=edgwareyouthnw@gmail.com commit -q -m ' *)",
+      "Bash(node -e \"1\")",
+      "Bash(npx --yes csstree-validator styles.css)",
+      "Bash(grep -n 'data-reveal style=\"--i:\\\\${index}\"' app.js)",
+      "Bash(node --check app.js)",
+      "Bash(rm -f .data/store.json)",
+      "Bash(curl -s http://localhost:3212/api/clients)",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\)['items'];print\\(len\\(d\\),'clients'\\);print\\('has notes+isCaseStudy:', all\\('notes' in c and 'isCaseStudy' in c for c in d\\)\\)\")",
+      "Bash(node contrast.mjs)",
+      "Bash(node --check \"/Users/rayyanmonsur/Documents/Advatar/new web/app.js\")",
+      "Bash(curl -s -b c2.txt -X PUT http://localhost:3212/api/settings -H 'Content-Type: application/json' -d '{\"logoLightUrl\":\"\",\"logoDarkUrl\":\"\",\"textureUrl\":\"\"}')",
+      "Bash(python3 -c \"import sys,json;s=json.load\\(sys.stdin\\)['settings'];print\\('cleared:', not any\\([s['logoLightUrl'],s['logoDarkUrl'],s['textureUrl']]\\)\\)\")",
+      "Bash(node theme-shots.mjs light L2 1440 900 \"/about@520\" \"/look-inside@1500\")",
+      "Bash(node theme-shots.mjs dark D2 1440 900 \"/our-work@2400\")",
+      "Bash(node theme-shots.mjs light LM 390 844 \"/@0\")"
     ]
   }
 }

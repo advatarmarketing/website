@@ -35,8 +35,16 @@ export default collectionRoute({
         .map(sanitizeVideo)
         .filter((video) => video.driveFileId),
       websiteUrl: cleanUrl(client.websiteUrl),
+      // Free-text flag for extra coverage (e.g. "also event photography") — kept
+      // here rather than duplicating the client under a second category.
+      notes: clean(client.notes, 200),
       featured: Boolean(client.featured),
       isRecentWin: Boolean(client.isRecentWin),
+      // Recent wins double as case studies unless explicitly overridden, so the
+      // Results "see more" view fills itself as clients get featured.
+      isCaseStudy: client.isCaseStudy === undefined
+        ? Boolean(client.isRecentWin)
+        : Boolean(client.isCaseStudy),
       order: Number.isFinite(Number(client.order)) ? Number(client.order) : 999,
     };
   },

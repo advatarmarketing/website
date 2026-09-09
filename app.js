@@ -72,6 +72,10 @@ const ICONS = {
   trash: '<path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/>',
   lock: '<rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
   logout: '<path d="M15 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h9"/><path d="M14 12h7M18 8l3 4-3 4"/>',
+  sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4"/>',
+  moon: '<path d="M20 13.4A8.2 8.2 0 1 1 10.6 4a6.6 6.6 0 0 0 9.4 9.4z"/>',
+  eye: '<path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
+  home: '<path d="M4 10.5 12 4l8 6.5"/><path d="M6 9.6V20h12V9.6"/>',
   instagram: '<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17" cy="7" r="1"/>',
   linkedin: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 10v7M7 7v.5M11 17v-4a2 2 0 0 1 4 0v4"/>',
   tiktok: '<path d="M14 4v10.5a3.5 3.5 0 1 1-3.5-3.5"/><path d="M14 4c.5 2.5 2 4 4.5 4.2"/>',
@@ -243,15 +247,65 @@ const NAV_ITEMS = [
   { href: '/our-work', label: 'Our Work' },
   { href: '/about', label: 'About' },
   { href: '/contact', label: 'Contact' },
-  { href: '/look-inside', label: 'Look Inside' },
+  { href: '/look-inside', label: 'Look Inside', glyph: 'eye' },
   { href: '/hiring', label: "We're Hiring" },
 ];
 
-const LOGO = `
-  <svg viewBox="0 0 22 24" aria-hidden="true" focusable="false" fill="none">
-    <path d="M4 22 11 2l7 20" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
-    <path d="M7.4 15.5h7.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+/** The nav menu also lists Home, which the top bar covers with the logo. */
+const MENU_ITEMS = [{ href: '/', label: 'Home', glyph: 'home' }, ...NAV_ITEMS];
+
+/* ---------------------------------------------------------------- Theme --- */
+
+const THEME_KEY = 'advatar-theme';
+
+const currentTheme = () =>
+  document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch {
+    /* Private mode — the choice just won't persist. */
+  }
+  // The nav logo differs per theme, so re-render whichever marks are on screen.
+  $$('[data-brand]').forEach((node) => { node.innerHTML = brandInner(); });
+}
+
+const toggleTheme = () => applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
+
+const themeToggleButton = (extraClass = '') => `
+  <button type="button" class="icon-btn theme-toggle ${extraClass}" data-theme-toggle
+          aria-label="Switch to ${currentTheme() === 'dark' ? 'light' : 'dark'} mode">
+    ${icon('sun', 'icon-sun')}${icon('moon', 'icon-moon')}
+  </button>`;
+
+/* ----------------------------------------------------------------- Logo --- */
+
+/*
+  Built-in fallback mark: the "A" with an upward arrow in its counter, over the
+  underscore bar. Used until real logo files are set via settings.logoLightUrl /
+  logoDarkUrl in Web Dev Edit.
+*/
+const LOGO_FALLBACK = `
+  <svg viewBox="0 0 30 32" aria-hidden="true" focusable="false" fill="none">
+    <path d="M13.2 3h3.6l9.7 21.2h-5.3L15 8.7 8.8 24.2H3.5z" fill="currentColor"/>
+    <path d="M8.9 18.8h12.2v3.1H8.9z" fill="currentColor"/>
+    <path d="M15 15.5V8.6" stroke="currentColor" stroke-width="1.1"/>
+    <path d="M12.9 10.6 15 8.2l2.1 2.4" stroke="currentColor" stroke-width="1.1"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M3.5 26.9h19.1V31H3.5z" fill="currentColor"/>
+    <path d="M25.1 26.9h1.2l1 2.3 1-2.3h1.2V31h-1v-2.4L27.6 31h-.6l-.9-2.4V31h-1z" fill="currentColor"/>
   </svg>`;
+
+/** Inner markup for the brand mark — a real logo image, or the fallback. */
+function brandInner() {
+  const settings = state.settings ?? {};
+  const url = safeUrl(currentTheme() === 'dark' ? settings.logoDarkUrl : settings.logoLightUrl);
+  return url
+    ? `<img class="brand-logo" src="${url}" alt="Advatar" decoding="async">`
+    : `${LOGO_FALLBACK}<span class="brand-word">Advatar</span>`;
+}
 
 function navFragment(path) {
   const link = ({ href, label }) =>
@@ -260,15 +314,15 @@ function navFragment(path) {
   return `
   <header class="nav" data-scrolled="false">
     <div class="nav-inner">
-      <a class="brand" href="/" aria-label="Advatar — home">
-        ${LOGO}<span class="brand-word">Advatar</span>
-      </a>
+      <a class="brand" href="/" aria-label="Advatar — home" data-brand>${brandInner()}</a>
 
       <nav aria-label="Primary">
         <ul class="nav-links">${NAV_ITEMS.map(link).join('')}</ul>
       </nav>
 
       <div class="nav-actions">
+        ${themeToggleButton()}
+
         <!--
           LOGIN BUTTON — DO NOT BUILD UNTIL EXPLICITLY ASKED.
           Phase 9 fills this slot with a "Login" pill linking to the CRM app.
@@ -293,7 +347,7 @@ function footerFragment(settings) {
     <div class="shell">
       <div class="footer-inner">
         <div class="stack">
-          <a class="brand" href="/">${LOGO}<span class="brand-word">Advatar</span></a>
+          <a class="brand" href="/" data-brand>${brandInner()}</a>
           <p class="tiny" style="max-width:26ch">Impact-focused marketing. Video at the core.</p>
         </div>
 
@@ -389,8 +443,8 @@ async function renderHome() {
     { n: '03', glyph: 'diamond', title: 'Branding', copy: 'Elevating your brand.', href: '/our-work#branding' },
   ];
 
-  const winCard = (client) => `
-    <article class="win-card">
+  const winCard = (client, index) => `
+    <article class="win-card" data-reveal style="--i:${index}">
       ${mediaTile({
         driveFileId: client.videos?.[0]?.driveFileId,
         title: `${client.name} — reel`,
@@ -430,7 +484,7 @@ async function renderHome() {
 
     <section class="section" id="recent-wins">
       <div class="shell">
-        <div class="section-head">
+        <div class="section-head" data-reveal>
           <div>
             ${eyebrow('Recent wins', 'plus')}
             <h2 class="display display--lg">The latest work.</h2>
@@ -439,12 +493,17 @@ async function renderHome() {
             <span class="dim">A snapshot of who we've been building for lately.</span></p>
         </div>
         ${wins.length
-          ? `<div class="wins-grid">${wins.map(winCard).join('')}</div>`
+          ? `<div class="carousel" data-carousel data-at-end="false">
+               <div class="carousel-track">${wins.map(winCard).join('')}</div>
+               <button type="button" class="icon-btn carousel-nav" data-carousel-next
+                       aria-label="Scroll to more recent wins">${icon('arrowRight')}</button>
+             </div>`
           : emptyState('No recent wins yet', 'Add clients and flag them as recent wins from Web dev edit mode.')}
         ${editOnly(`
         <div style="margin-top:1.5rem">
           <button type="button" class="edit-chip" data-edit="recent-wins">${icon('pencil')} Edit recent wins</button>
           <button type="button" class="edit-chip" data-edit="hero">${icon('pencil')} Edit hero assets</button>
+          <button type="button" class="edit-chip" data-edit="brand">${icon('pencil')} Logos &amp; texture</button>
         </div>
         `)}
       </div>
@@ -452,10 +511,10 @@ async function renderHome() {
 
     <section class="section backdrop-warm" id="what-we-do">
       <div class="shell">
-        ${eyebrow('What we do', 'diamond')}
+        <div data-reveal>${eyebrow('What we do', 'diamond')}</div>
         <div class="teaser-grid">
-          ${teasers.map((teaser) => `
-            <a class="glass-card" href="${teaser.href}">
+          ${teasers.map((teaser, index) => `
+            <a class="glass-card" href="${teaser.href}" data-reveal style="--i:${index}">
               <span class="card-index">${icon(teaser.glyph)} ${teaser.n} Service</span>
               <div class="card-body">
                 <h3>${esc(teaser.title)}</h3>
@@ -475,6 +534,9 @@ function mountHome() {
       if (client) openClientModal(client);
     });
   });
+
+  mountCarousel($('[data-carousel]'));
+  mountHeroParallax();
 }
 
 /** Modal listing every video for one client, plus their tagline as the only text. */
@@ -515,7 +577,7 @@ async function renderOurWork() {
   const resultsRow = stats.length
     ? stats.map((stat) =>
         `<span class="result">${icon('arrowUp')}${esc(stat.label)}</span>`
-      ).join('<span class="divider">|</span>')
+      ).join('<span class="divider" aria-hidden="true">|</span>')
     : '<span class="result muted">Add your results in edit mode</span>';
 
   const clientRow = (client) => `
@@ -578,7 +640,7 @@ async function renderOurWork() {
           ${icon('chevronRight')}
         </span>
       </button>
-      <div class="disclosure-panel" id="photo-${esc(category.id)}" hidden>
+      <div class="disclosure-panel" id="photo-${esc(category.id)}" hidden data-animate="true">
         <div style="display:grid;gap:1rem;grid-template-columns:minmax(0,18rem) minmax(0,1fr);align-items:start">
           ${mediaTile({ imageUrl: category.coverPhotoUrl, title: `${category.name} — cover`, ratio: 'square', empty: 'Cover photo coming soon' })}
           ${category.photos?.length
@@ -608,7 +670,7 @@ async function renderOurWork() {
       <div class="shell">
         <div class="glow" style="--glow-w:34rem;--glow-h:26rem;--glow-a:0.28;left:-10rem;top:-6rem"></div>
         ${eyebrow('Results', 'arrowUp')}
-        <div class="results-row">${resultsRow}</div>
+        <div class="results-row" data-reveal>${resultsRow}</div>
         <div style="margin-top:1.5rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center">
           <button type="button" class="link-arrow" data-results-modal><span>See more</span>${icon('arrowRight')}</button>
           ${editOnly(`<button type="button" class="edit-chip" data-edit="results">${icon('pencil')} Edit results</button>`)}
@@ -618,7 +680,7 @@ async function renderOurWork() {
 
     <section class="section" id="video">
       <div class="shell">
-        <div class="section-head">
+        <div class="section-head" data-reveal>
           <div>
             ${eyebrow('Video marketing', 'film')}
             <h2 class="display display--lg">Selected reels.</h2>
@@ -628,8 +690,8 @@ async function renderOurWork() {
         </div>
 
         ${featured.length
-          ? `<div class="reel-grid">${featured.map((client) => `
-              <figure style="margin:0;display:grid;gap:0.75rem">
+          ? `<div class="reel-grid">${featured.map((client, index) => `
+              <figure data-reveal style="display:grid;gap:0.75rem;--i:${index}">
                 ${mediaTile({ driveFileId: client.videos?.[0]?.driveFileId, title: `${client.name} — reel`, empty: 'Video coming soon' })}
                 <figcaption class="tiny">${esc(client.tagline || client.name)}</figcaption>
               </figure>`).join('')}</div>`
@@ -645,13 +707,58 @@ async function renderOurWork() {
           ${industries.length
             ? industries.map(industryPanel).join('')
             : emptyState('No clients yet', 'Add clients in edit mode and they will group by industry here.')}
+
+          <!-- R9: the full client index, alongside the showcase above. -->
+          <div class="all-clients">
+            <div class="section-head" style="margin-bottom:1.5rem">
+              <div>
+                ${eyebrow('All clients', 'layers')}
+                <h3 class="display display--md">Everyone we've worked with.</h3>
+              </div>
+              <p class="lede">${clients.length} client${clients.length === 1 ? '' : 's'}.
+                <span class="dim">Listed once each, under their primary category.</span></p>
+            </div>
+
+            ${industries.map(([name, group]) => `
+              <div class="client-index">
+                <h4 class="client-index-head">
+                  <span>${esc(name)}</span>
+                  <span class="tiny">${group.length}</span>
+                </h4>
+                <ul class="client-index-list">
+                  ${group.map((client) => `
+                    <li>
+                      <button type="button" class="client-index-row" data-toggle="idx-${esc(client.id)}"
+                              aria-expanded="false" aria-controls="idx-${esc(client.id)}">
+                        <span class="client-index-name">${esc(client.name)}</span>
+                        ${client.notes ? `<span class="tag tag--soft">${esc(client.notes)}</span>` : ''}
+                        <span class="client-index-count tiny">
+                          ${client.videos?.length ? `${client.videos.length} video${client.videos.length === 1 ? '' : 's'}` : 'No work added yet'}
+                        </span>
+                        ${icon('chevronRight')}
+                      </button>
+                      <div class="disclosure-panel" id="idx-${esc(client.id)}" hidden data-animate="true">
+                        ${client.videos?.length
+                          ? `<div class="reel-grid" style="padding-block:1rem">${client.videos.map((video) => `
+                              <figure style="display:grid;gap:0.5rem">
+                                ${mediaTile({ driveFileId: video.driveFileId, title: `${client.name} — ${video.title}` })}
+                                <figcaption class="tiny">${esc(video.title)}</figcaption>
+                              </figure>`).join('')}</div>`
+                          : `<p class="tiny" style="padding-block:0.85rem 1.25rem">
+                               No work added for ${esc(client.name)} yet — add their Drive links in edit mode.
+                             </p>`}
+                      </div>
+                    </li>`).join('')}
+                </ul>
+              </div>`).join('')}
+          </div>
         </div>
       </div>
     </section>
 
     <section class="section" id="websites">
       <div class="shell">
-        <div class="section-head">
+        <div class="section-head" data-reveal>
           <div>
             ${eyebrow('Websites', 'layers')}
             <h2 class="display display--lg">Beautifully designed and crafted websites,<br>just like this one.</h2>
@@ -664,7 +771,7 @@ async function renderOurWork() {
                  <button type="button" class="btn btn--ghost" data-toggle="more-sites"
                          aria-expanded="false" aria-controls="more-sites">View more</button>
                </div>
-               <div class="disclosure-panel" id="more-sites" hidden style="margin-top:1.5rem">
+               <div class="disclosure-panel" id="more-sites" hidden data-animate="true" style="margin-top:1.5rem">
                  <div class="site-grid">${websites.slice(3).map(siteCard).join('')}</div>
                </div>` : ''}`
           : emptyState('No websites added yet', 'Add your three portfolio entries in edit mode.')}
@@ -679,7 +786,7 @@ async function renderOurWork() {
     <section class="section" id="photography">
       <div class="shell">
         ${eyebrow('Photography', 'image')}
-        <h2 class="display display--lg" style="margin-bottom:2.5rem">Shot properly, lit properly.</h2>
+        <h2 class="display display--lg" data-reveal style="margin-bottom:2.5rem">Shot properly, lit properly.</h2>
         ${photography.length
           ? photography.map(photoCategory).join('')
           : emptyState('No categories yet', 'Add photography categories in edit mode.')}
@@ -694,7 +801,7 @@ async function renderOurWork() {
     <section class="section backdrop-warm" id="branding">
       <div class="shell">
         ${eyebrow('Branding', 'diamond')}
-        <h2 class="display display--lg" style="margin-bottom:2.5rem">Elevating your brand.</h2>
+        <h2 class="display display--lg" data-reveal style="margin-bottom:2.5rem">Elevating your brand.</h2>
         ${branding.length
           ? `<div class="branding-masonry">${branding.map((item) => `
               <figure style="margin:0">
@@ -713,16 +820,45 @@ async function renderOurWork() {
 }
 
 function mountOurWork() {
-  $('[data-results-modal]')?.addEventListener('click', () => {
-    const stats = state.settings?.resultsStats ?? [];
-    openModal({
-      title: 'The numbers',
-      body: stats.length
-        ? `<ul class="stat-list">${stats.map((stat) => `
-            <li><span>${esc(stat.label)}</span>
-                <span class="stat-value">${esc(stat.value || '—')}</span></li>`).join('')}</ul>`
-        : emptyState('No numbers yet', 'Add a value against each result in edit mode.'),
-    });
+  $('[data-results-modal]')?.addEventListener('click', openCaseStudies);
+}
+
+/**
+ * Results "see more" (R8): real case studies rather than raw totals. Driven by
+ * the client collection's isCaseStudy flag — which defaults to whatever
+ * isRecentWin is — so featuring more clients in edit mode fills this view
+ * automatically.
+ */
+function openCaseStudies() {
+  const studies = (state.clients ?? [])
+    .filter((client) => client.isCaseStudy)
+    .sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+
+  openModal({
+    title: 'Case studies',
+    subtitle: 'The work behind the numbers.',
+    body: studies.length
+      ? `<div class="stack-2">${studies.map((client) => `
+          <article class="case-study">
+            <div class="case-study-head">
+              <h3>${esc(client.name)}</h3>
+              <span class="tag">${esc(client.category)}</span>
+            </div>
+            ${client.tagline
+              ? `<p class="lede">${esc(client.tagline)}</p>`
+              : `<p class="tiny">Add a one-line result for ${esc(client.name)} in edit mode.</p>`}
+            ${client.videos?.length
+              ? `<div class="reel-grid">${client.videos.map((video) => `
+                  <figure style="display:grid;gap:0.5rem">
+                    ${mediaTile({ driveFileId: video.driveFileId, title: `${client.name} — ${video.title}` })}
+                    <figcaption class="tiny">${esc(video.title)}</figcaption>
+                  </figure>`).join('')}</div>`
+              : `<div class="reel-grid">${mediaTile({ title: client.name, empty: 'Video coming soon' })}</div>`}
+          </article>`).join('')}</div>`
+      : emptyState(
+          'No case studies yet',
+          'Flag clients as case studies in edit mode — recent wins are included by default.'
+        ),
   });
 }
 
@@ -741,7 +877,7 @@ async function renderAbout() {
   return `
   <main id="main" class="page">
     <section class="section">
-      <div class="shell">
+      <div class="shell" data-reveal>
         <div class="glow" style="--glow-w:40rem;--glow-h:30rem;--glow-a:0.3;right:-8rem;top:-4rem"></div>
         ${eyebrow('About', 'diamond')}
         <figure class="quote-block">
@@ -753,9 +889,10 @@ async function renderAbout() {
 
     <section class="section">
       <div class="shell stack-2">
-        <p class="lede" style="max-width:52ch">An impact-focused marketing agency.
-          <span class="dim">Video marketing is the core specialism, with strong skillsets in web design,
-          photography, branding and running ads — for clients who want a holistic approach.</span></p>
+        <p class="lede" data-reveal style="max-width:54ch">
+          Founded in ${esc(founded || '2024')}, Advatar has worked with over
+          ${esc(clientsCount || '50')} clients.
+        </p>
 
         <div class="stat-row">
           ${stat(founded, 'Founded')}
@@ -768,21 +905,28 @@ async function renderAbout() {
         </div>
         `)}
 
-        <div class="stack">
-          <p class="lede">Marketing since 2021. Economics graduate, University of Leicester.</p>
-          <p class="lede">The team is growing.
-            <a class="link-arrow" href="/hiring"><span>Register your interest</span>${icon('arrowRight')}</a></p>
+        <div class="stack-2">
+          <p class="lede" data-reveal style="max-width:54ch">
+            The founder, Ar-Rayyan Monsur, has been working in marketing since 2021
+            and graduated in Economics at the University of Leicester.
+          </p>
+          <p class="lede" data-reveal style="max-width:54ch">
+            The team now expands to ${esc(teamCount || '13')} dedicated team members and is growing.
+            Want to join the team, <a class="text-link" href="/hiring">register your interest here</a>
+          </p>
         </div>
       </div>
     </section>
 
     <section class="section ihsan">
       <div class="ihsan-mark" aria-hidden="true" lang="ar">إحسان</div>
-      <div class="shell ihsan-body">
+      <div class="shell ihsan-body" data-reveal>
         ${eyebrow('Ihsan', 'plus')}
-        <h2 class="display display--lg">Excellence.</h2>
-        <p class="lede">We don't release work we're not proud of.
-          <span class="dim">If it isn't right, it doesn't go out.</span></p>
+        <p class="lede" style="max-width:56ch;font-size:clamp(1.0625rem,1.6vw,1.375rem)">
+          Our aim is to work upon the term of &ldquo;Ihsan&rdquo;
+          (<span lang="ar" class="ihsan-inline">إحسان</span>) or in other words, Excellence
+          &mdash; and we never release a bit of work that we&rsquo;re not impressed by ourselves.
+        </p>
       </div>
     </section>
   </main>`;
@@ -807,20 +951,20 @@ async function renderContact() {
       <div class="shell">
         <div class="glow" style="--glow-w:36rem;--glow-h:26rem;--glow-a:0.26;left:-8rem;top:-4rem"></div>
         ${eyebrow('Contact', 'mail')}
-        <h1 class="display display--lg" style="max-width:18ch">Let's talk about what you're building.</h1>
+        <h1 class="display display--lg" data-reveal style="max-width:18ch">Let's talk about what you're building.</h1>
       </div>
     </section>
 
     <section class="section">
       <div class="shell contact-grid">
-        <div class="stack-2">
+        <div class="stack-2" data-reveal>
           <p class="lede">WhatsApp us and we'll get back to you before you take a bite out of your next meal.</p>
           <div>${whatsapp}</div>
         </div>
 
         <div class="or-divider" aria-hidden="true"><span>Or</span></div>
 
-        <div class="stack-2">
+        <div class="stack-2" data-reveal style="--i:1">
           <form class="editor-form" id="contact-form" novalidate>
             <div class="field">
               <label for="cf-name">Name</label>
@@ -914,8 +1058,8 @@ async function renderLookInside() {
     <section class="section">
       <div class="shell">
         <div class="glow" style="--glow-w:34rem;--glow-h:26rem;--glow-a:0.24;right:-8rem;top:-4rem"></div>
-        ${eyebrow('Look inside', 'diamond')}
-        <h1 class="display display--lg" style="max-width:20ch">What it's actually like to work with us.</h1>
+        ${eyebrow('Look inside', 'eye')}
+        <h1 class="display display--lg" data-reveal style="max-width:20ch">What it's actually like to work with us.</h1>
         <p class="lede" style="margin-top:1.5rem">Start to finish.
           <span class="dim">No mystery, no black box — here's every step.</span></p>
       </div>
@@ -923,9 +1067,9 @@ async function renderLookInside() {
 
     <section class="section">
       <div class="shell timeline">
-        <ol class="timeline-rail" aria-hidden="true">
+        <ol class="timeline-rail" aria-hidden="true" style="--progress:0">
           ${PROCESS_STEPS.map((step, index) => `
-            <li data-rail="${index}" data-active="${index === 0}">
+            <li data-rail="${index}" data-active="${index === 0}" data-passed="${index === 0}">
               <span class="dot"></span><span class="rail-label">${esc(step.label)}</span>
             </li>`).join('')}
         </ol>
@@ -945,23 +1089,36 @@ async function renderLookInside() {
 
 function mountLookInside() {
   const steps = $$('.timeline-step');
+  const rail = $('.timeline-rail');
   const rails = $$('.timeline-rail li');
   if (!steps.length) return;
 
-  /* With reduced motion, show everything and skip the scroll choreography. */
-  if (prefersReducedMotion()) {
+  /** Light every marker up to `index`, and fill the bar to match (R7). */
+  function setActive(index) {
+    rails.forEach((item) => {
+      const position = Number(item.dataset.rail);
+      item.dataset.active = String(position === index);
+      item.dataset.passed = String(position <= index);
+    });
+    // Fill proportionally to the active marker's position along the rail.
+    const progress = rails.length > 1 ? index / (rails.length - 1) : 1;
+    rail?.style.setProperty('--progress', String(progress));
+  }
+
+  /* With reduced motion — or no observer — show everything up front. */
+  if (prefersReducedMotion() || !('IntersectionObserver' in window)) {
     steps.forEach((step) => { step.dataset.visible = 'true'; });
+    setActive(rails.length - 1);
     return;
   }
+
+  setActive(0);
 
   const observer = new IntersectionObserver((entries) => {
     for (const entry of entries) {
       if (!entry.isIntersecting) continue;
       entry.target.dataset.visible = 'true';
-      const index = Number(entry.target.dataset.step);
-      rails.forEach((rail) => {
-        rail.dataset.active = String(Number(rail.dataset.rail) === index);
-      });
+      setActive(Number(entry.target.dataset.step));
     }
   }, { rootMargin: '-25% 0px -35% 0px', threshold: 0.01 });
 
@@ -1005,7 +1162,7 @@ async function renderHiring() {
       <div class="shell">
         <div class="glow" style="--glow-w:38rem;--glow-h:28rem;--glow-a:0.28;left:-8rem;top:-4rem"></div>
         ${eyebrow("We're hiring", 'briefcase')}
-        <h1 class="display display--lg" style="max-width:18ch">Build something you're proud of.</h1>
+        <h1 class="display display--lg" data-reveal style="max-width:18ch">Build something you're proud of.</h1>
       </div>
     </section>
 
@@ -1030,7 +1187,7 @@ async function renderHiring() {
 
     <section class="section backdrop-warm">
       <div class="shell">
-        <p class="lede" style="max-width:60ch;font-size:clamp(1rem,1.5vw,1.25rem)">
+        <p class="lede" data-reveal style="max-width:60ch;font-size:clamp(1rem,1.5vw,1.25rem)">
           At Advatar, growth isn't just something we chase for clients — we build it into how we work together.
           <span class="dim">This is a place to stretch, take ownership, and do work you're proud to put your name on.</span>
         </p>
@@ -1054,7 +1211,7 @@ async function renderHiring() {
     <section class="section" id="vacancies">
       <div class="shell">
         ${eyebrow('Open roles', 'briefcase')}
-        <h2 class="display display--lg" style="margin-bottom:2rem">Vacancies.</h2>
+        <h2 class="display display--lg" data-reveal style="margin-bottom:2rem">Vacancies.</h2>
 
         <div class="job-filters">
           <div class="field">
@@ -1281,45 +1438,300 @@ function mountChrome() {
   $('[data-nav-toggle]')?.addEventListener('click', openNavMenu);
   $('[data-webdev]')?.addEventListener('click', onWebDevClick);
 
-  /* Instant-reveal disclosures — no animation, per the brief. */
+  $$('[data-theme-toggle]').forEach((button) => {
+    button.addEventListener('click', () => {
+      toggleTheme();
+      syncThemeToggles();
+    });
+  });
+
+  /*
+    Disclosures. Video Marketing's industry/client panels stay instant — that was
+    explicit in the original brief. Panels marked data-animate get the softer
+    grid-rows unravel instead (R10).
+  */
   $$('[data-toggle]').forEach((button) => {
     button.addEventListener('click', () => {
       const panel = document.getElementById(button.getAttribute('aria-controls'));
       if (!panel) return;
       const open = button.getAttribute('aria-expanded') === 'true';
       button.setAttribute('aria-expanded', String(!open));
-      panel.hidden = open;
+
+      if (panel.dataset.animate === 'true') {
+        panel.hidden = false;
+        panel.classList.add('disclosure-panel--animated');
+        // Next frame, so the transition has a start value to animate from.
+        requestAnimationFrame(() => { panel.dataset.open = String(!open); });
+      } else {
+        panel.hidden = open;
+      }
     });
+  });
+
+  mountReveals();
+  mountAmbientStill();
+}
+
+/* -------------------------------------------------------- Scroll reveal --- */
+
+/**
+ * Reveals every [data-reveal] element as it enters the viewport (R5). Grouped
+ * children get a --i stagger index so cards cascade rather than popping as one.
+ */
+function mountReveals() {
+  const targets = $$('[data-reveal]');
+  if (!targets.length) return;
+
+  // A reveal that never fires would leave content permanently invisible, so any
+  // reason not to animate means show everything immediately.
+  if (prefersReducedMotion() || !('IntersectionObserver' in window)) {
+    targets.forEach((node) => { node.dataset.shown = 'true'; });
+    return;
+  }
+
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      entry.target.dataset.shown = 'true';
+      observer.unobserve(entry.target);   // reveal once, then stop watching
+    }
+  }, { rootMargin: '0px 0px -12% 0px', threshold: 0.08 });
+
+  targets.forEach((node) => observer.observe(node));
+  registerCleanup(() => observer.disconnect());
+}
+
+/** Layer the blurred still from settings behind everything, when one is set. */
+function mountAmbientStill() {
+  $('.ambient-still')?.remove();
+  const url = safeUrl(state.settings?.textureUrl);
+  if (!url) return;
+
+  const img = document.createElement('img');
+  img.className = 'ambient-still';
+  img.src = url;
+  img.alt = '';
+  img.decoding = 'async';
+  img.setAttribute('aria-hidden', 'true');
+  document.body.prepend(img);
+}
+
+/* ------------------------------------------------------- Hero parallax --- */
+
+/**
+ * Hero hand-off (R5): background layers track scroll at a fraction of the page
+ * speed, and the hero content fades as the next section rises over it.
+ */
+function mountHeroParallax() {
+  const hero = $('.hero');
+  if (!hero || prefersReducedMotion()) return;
+
+  const layers = [
+    { node: $('.hero-media'), rate: 0.35 },
+    { node: $('.hero-light'), rate: 0.28 },
+    { node: $('.hero-hand'), rate: 0.45 },
+  ].filter((layer) => layer.node);
+
+  const content = $('.hero-content');
+  const foot = $('.hero-foot');
+  let ticking = false;
+
+  function update() {
+    ticking = false;
+    const y = window.scrollY;
+    const height = hero.offsetHeight || 1;
+    if (y > height) return;                    // hero is off-screen; nothing to do
+
+    for (const { node, rate } of layers) {
+      node.style.transform = `translate3d(0, ${y * rate}px, 0)`;
+    }
+
+    // Fade + lift the content out over the first 70% of the hero.
+    const progress = Math.min(1, y / (height * 0.7));
+    const fade = 1 - progress;
+    if (content) {
+      content.style.opacity = String(fade);
+      content.style.transform = `translate3d(0, ${y * 0.12}px, 0)`;
+    }
+    if (foot) foot.style.opacity = String(fade);
+  }
+
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(update);
+  }
+
+  update();
+  window.addEventListener('scroll', onScroll, { passive: true });
+  registerCleanup(() => {
+    window.removeEventListener('scroll', onScroll);
+    for (const { node } of layers) node.style.transform = '';
+    if (content) { content.style.opacity = ''; content.style.transform = ''; }
+    if (foot) foot.style.opacity = '';
   });
 }
 
+/* ------------------------------------------------------------ Carousel --- */
+
+/**
+ * Single-row swipeable carousel (R4): native scroll-snap for touch and
+ * trackpad, pointer-drag for mouse, and a right-edge fade + nudge button that
+ * disappear once the end is reached.
+ */
+function mountCarousel(root) {
+  if (!root) return;
+  const track = $('.carousel-track', root);
+  const next = $('.carousel-nav', root);
+  if (!track) return;
+
+  const updateEnd = () => {
+    const atEnd = track.scrollLeft + track.clientWidth >= track.scrollWidth - 8;
+    root.dataset.atEnd = String(atEnd);
+  };
+
+  const step = () => Math.max(track.clientWidth * 0.8, 260);
+  next?.addEventListener('click', () => track.scrollBy({ left: step(), behavior: 'smooth' }));
+
+  track.addEventListener('scroll', updateEnd, { passive: true });
+  updateEnd();
+
+  /* Mouse drag. Touch is left to the browser's own momentum scrolling. */
+  let dragging = false;
+  let startX = 0;
+  let startScroll = 0;
+
+  const onPointerDown = (event) => {
+    if (event.pointerType === 'touch') return;
+    dragging = true;
+    startX = event.clientX;
+    startScroll = track.scrollLeft;
+    track.setPointerCapture(event.pointerId);
+  };
+
+  const onPointerMove = (event) => {
+    if (!dragging) return;
+    const delta = event.clientX - startX;
+    // Only claim the gesture once it's clearly a drag, so clicks still work.
+    if (!track.dataset.dragging && Math.abs(delta) < 4) return;
+    track.dataset.dragging = 'true';
+    track.scrollLeft = startScroll - delta;
+  };
+
+  const endDrag = (event) => {
+    if (!dragging) return;
+    dragging = false;
+    if (track.hasPointerCapture?.(event.pointerId)) track.releasePointerCapture(event.pointerId);
+    // Defer so the click that ends a drag is swallowed, not followed.
+    requestAnimationFrame(() => { delete track.dataset.dragging; });
+  };
+
+  track.addEventListener('pointerdown', onPointerDown);
+  track.addEventListener('pointermove', onPointerMove);
+  track.addEventListener('pointerup', endDrag);
+  track.addEventListener('pointercancel', endDrag);
+
+  const onResize = () => updateEnd();
+  window.addEventListener('resize', onResize);
+  registerCleanup(() => window.removeEventListener('resize', onResize));
+}
+
+/**
+ * Full-screen navigation panel (R3). One item per line, large and legible, with
+ * a gold bar marking the current page. Focus is trapped while it is open, and
+ * Escape or the close button dismisses it.
+ */
 function openNavMenu() {
   const path = window.location.pathname;
+  const toggle = $('[data-nav-toggle]');
+
   const menu = document.createElement('div');
   menu.className = 'nav-menu';
-  menu.innerHTML = `
-    <button type="button" class="icon-btn nav-menu-close" aria-label="Close menu">${icon('close')}</button>
-    <nav aria-label="Primary">
-      <a href="/"${path === '/' ? ' aria-current="page"' : ''}>Home</a>
-      ${NAV_ITEMS.map((item) =>
-        `<a href="${item.href}"${item.href === path ? ' aria-current="page"' : ''}>${esc(item.label)}</a>`).join('')}
-    </nav>`;
+  menu.setAttribute('role', 'dialog');
+  menu.setAttribute('aria-modal', 'true');
+  menu.setAttribute('aria-label', 'Site menu');
 
-  const close = () => {
+  menu.innerHTML = `
+    <div class="nav-menu-top">
+      <span class="brand" data-brand>${brandInner()}</span>
+      <button type="button" class="icon-btn" data-menu-close aria-label="Close menu">${icon('close')}</button>
+    </div>
+
+    <nav aria-label="Primary">
+      <ul class="nav-menu-links">
+        ${MENU_ITEMS.map((item) => `
+          <li>
+            <a href="${item.href}"${item.href === path ? ' aria-current="page"' : ''}>
+              ${item.glyph ? icon(item.glyph) : ''}<span>${esc(item.label)}</span>
+            </a>
+          </li>`).join('')}
+      </ul>
+    </nav>
+
+    <div class="nav-menu-foot">
+      <span class="micro">Appearance</span>
+      ${themeToggleButton()}
+      <!--
+        LOGIN BUTTON — DO NOT BUILD UNTIL EXPLICITLY ASKED.
+        Phase 9 fills this slot with a "Login" pill linking to the CRM app.
+      -->
+      <div class="nav-login-slot"></div>
+    </div>`;
+
+  const focusables = () =>
+    $$('a[href], button:not([disabled])', menu).filter((node) => node.offsetParent !== null);
+
+  function onKey(event) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      close();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const nodes = focusables();
+    if (!nodes.length) return;
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  function close() {
     menu.remove();
     document.removeEventListener('keydown', onKey);
     document.body.style.overflow = '';
-    $('[data-nav-toggle]')?.focus();
-  };
-  const onKey = (event) => { if (event.key === 'Escape') close(); };
+    toggle?.setAttribute('aria-expanded', 'false');
+    toggle?.focus();
+  }
 
   menu.addEventListener('click', (event) => {
-    if (event.target.closest('a') || event.target.closest('.nav-menu-close')) close();
+    // The theme toggle stays open so the change can be seen behind the panel.
+    if (event.target.closest('[data-theme-toggle]')) {
+      toggleTheme();
+      syncThemeToggles();
+      return;
+    }
+    if (event.target.closest('a') || event.target.closest('[data-menu-close]')) close();
   });
+
   document.addEventListener('keydown', onKey);
   document.body.append(menu);
   document.body.style.overflow = 'hidden';
-  $('.nav-menu-close', menu).focus();
+  toggle?.setAttribute('aria-expanded', 'true');
+  $('[data-menu-close]', menu).focus();
+}
+
+/** Keep every toggle's accessible label in step with the active theme. */
+function syncThemeToggles() {
+  const next = currentTheme() === 'dark' ? 'light' : 'dark';
+  $$('[data-theme-toggle]').forEach((button) => {
+    button.setAttribute('aria-label', `Switch to ${next} mode`);
+  });
 }
 
 /* ========================================================= Edit mode ===== */
@@ -1652,9 +2064,11 @@ const CLIENT_FIELDS = [
   { name: 'tagline', label: 'Tagline', type: 'text' },
   { name: 'websiteUrl', label: 'Website URL', type: 'text' },
   { name: 'logoUrl', label: 'Logo URL', type: 'text' },
+  { name: 'notes', label: 'Notes', type: 'text', hint: 'e.g. "Also event photography coverage".' },
   { name: 'order', label: 'Order', type: 'number' },
   { name: 'featured', label: 'Featured (selected reels)', type: 'checkbox' },
   { name: 'isRecentWin', label: 'Show in Recent Wins', type: 'checkbox' },
+  { name: 'isCaseStudy', label: 'Show in Case studies', type: 'checkbox' },
   {
     name: 'videos', label: 'Videos', type: 'rows',
     columns: [
@@ -1711,6 +2125,19 @@ function mountEditHandlers() {
         { name: 'heroVideoMobileUrl', label: 'Hero video — mobile', type: 'text' },
         { name: 'heroPosterUrl', label: 'Poster image (slow-connection fallback)', type: 'text' },
         { name: 'heroHandAssetUrl', label: 'Hand asset (PNG/WebP with transparency)', type: 'text' },
+      ],
+    }),
+
+    brand: () => openSettingsEditor({
+      title: 'Logos & texture',
+      subtitle: 'Leave the logos empty to use the built-in Advatar wordmark.',
+      fields: [
+        { name: 'logoLightUrl', label: 'Logo — light mode (dark artwork)', type: 'text' },
+        { name: 'logoDarkUrl', label: 'Logo — dark mode (light artwork)', type: 'text' },
+        {
+          name: 'textureUrl', label: 'Background texture', type: 'text',
+          hint: 'A still from your work. It is blurred and dimmed behind every page.',
+        },
       ],
     }),
 

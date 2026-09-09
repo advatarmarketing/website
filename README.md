@@ -83,9 +83,9 @@ Once unlocked, small `edit` chips appear beside every editable region:
 
 | Page       | What you can edit                                                    |
 |------------|----------------------------------------------------------------------|
-| Home       | Hero video / poster / hand asset URLs; which clients are Recent Wins  |
-| Our Work   | Clients (and their video lists), websites, photography, branding, results |
-| About      | Founded / clients / team numbers                                      |
+| Home       | Hero video / poster / hand asset URLs; light + dark logos; background texture; which clients are Recent Wins |
+| Our Work   | Clients (videos, category, notes, case-study flag), websites, photography, branding, results |
+| About      | Founded / clients / team numbers — these feed the copy directly       |
 | Contact    | WhatsApp number, email; read and delete contact submissions           |
 | We're Hiring | Behind-the-scenes gallery; add/edit/delete vacancies                |
 
@@ -106,21 +106,67 @@ absent from the DOM, not merely hidden — and every write is re-authorised serv
 Contact submissions are stored regardless; email notification is purely additive and a
 failure there never fails the submission.
 
+## Themes
+
+Two themes share one set of token names. Dark is the base `:root` declaration;
+`:root[data-theme="light"]` overrides the palette half. **Light is the default** — a tiny
+inline script in `<head>` stamps the attribute from `localStorage` before first paint, so
+there is no flash of the wrong theme. The sun/moon toggle sits in the nav on every page
+and again inside the menu panel.
+
+Two accent tokens exist on purpose:
+
+- `--gold-1` — the accent for large display text, icons, borders and glows.
+- `--gold-text` — the accent that is safe on **small text**. On dark they are the same
+  colour; in light mode `--gold-1` (`#C97A2E`) only reaches 3.1:1, so small text uses the
+  deeper `#8F5620` (5.6:1) instead.
+
+Contrast is verified, not assumed: every text node on all six pages was measured in both
+themes against its real composited backdrop, and all of it clears WCAG AA. If you change a
+palette value, re-check it — the failure mode is silent.
+
 ## Design system
 
 Tokens live at the top of `styles.css`.
 
-- **Palette** — near-black `#0A0908`, amber `#F2A93B` / `#C97A2E`, off-white `#F5F1E8`,
-  warm grey `#A79E90`. Both text colours clear WCAG AA on the background.
 - **Type** — General Sans (Fontshare) for display, Inter for UI. Nothing below 12px.
-- **Grain** — fixed `feTurbulence` overlay, ~6% opacity, `mix-blend-mode: overlay`.
-- **Golden glow** — reusable blurred radial `.glow`, sized per use via custom properties.
-- **Liquid glass** — `.glass-card`: 5% white fill, `backdrop-filter: blur(20px) saturate(140%)`,
-  1px 10%-white border, 20px radius.
+- **Grain** — fixed `feTurbulence` overlay. 12% at `mix-blend-mode: overlay` on dark;
+  6% at `soft-light` on light, where stronger grain reads as dirt.
+- **Texture** — nothing sits on flat colour. A fixed warm gradient mesh (`.ambient`) sits
+  behind every page; setting `settings.textureUrl` layers a blurred, dimmed still from real
+  work beneath it.
+- **Golden glow** — reusable blurred radial `.glow` with a slow continuous drift, scaled
+  down in light mode via `--glow-scale` so it reads as warmth, not as a glow effect.
+- **Liquid glass** — `.glass-card`: `backdrop-filter: blur(20px) saturate(140%)`, 1px
+  border, 20px radius, lifting slightly on hover.
 - **Hairline grid** — fixed vertical rules with `×` markers, hidden under 900px.
-- **Motion** — 150–300ms only, and only for state changes. The Our Work industry/client
-  panels are instant show/hide with no animation, as specified. `prefers-reduced-motion`
-  is respected everywhere, including the Look Inside scroll reveals.
+
+## Motion
+
+- **Scroll reveals** — anything marked `[data-reveal]` fades and lifts in on entry, with a
+  `--i` stagger for grouped items. Driven by one shared IntersectionObserver.
+- **Hero parallax** — the background layers track scroll at 0.28–0.45×, and the hero
+  content fades out as the next section rises over it.
+- **Look Inside** — a progress rail fills as you scroll, with a marker per step that lights
+  as its text becomes active.
+- **Instant by design** — the Our Work industry/client panels show and hide with no
+  animation, as the original brief required. Photography and Websites unravel with a
+  transition; they opt in via `data-animate="true"`.
+- **`prefers-reduced-motion`** — reveals appear instantly, parallax and glow drift stop,
+  hover displacement is removed. Reveals also short-circuit if `IntersectionObserver` is
+  missing, so content can never be left invisible.
+
+## Clients
+
+`data/seed.json` carries 45 clients across 8 categories, deduplicated from the spreadsheet
+so nobody appears twice. Where a client also had event-photography coverage, that is
+recorded in their `notes` field rather than duplicating them under a second category.
+
+Two flags drive where a client appears:
+
+- `isRecentWin` — the Home page carousel.
+- `isCaseStudy` — the Results "see more" view. Defaults to `isRecentWin`, so featuring a
+  client as a case study later is a single checkbox in edit mode.
 
 The hero needs no assets: the amber light shaft is pure CSS and recomposes on mobile so
 the headline always sits on dark ground. Supplying `heroVideoDesktopUrl` /

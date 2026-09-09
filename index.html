@@ -19,6 +19,22 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/styles.css">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+
+<!--
+  Stamp the theme before first paint so there is no flash of the wrong one.
+  Light is the default; a stored choice wins. Kept inline and tiny on purpose —
+  app.js loads as a module and would run far too late for this.
+-->
+<script>
+  (function () {
+    var theme = 'light';
+    try {
+      var stored = localStorage.getItem('advatar-theme');
+      if (stored === 'light' || stored === 'dark') theme = stored;
+    } catch (e) { /* private mode: fall through to the default */ }
+    document.documentElement.setAttribute('data-theme', theme);
+  })();
+</script>
 </head>
 <body>
 
@@ -40,6 +56,12 @@
   </filter>
 </svg>
 <div class="grain" aria-hidden="true"></div>
+
+<!--
+  Ambient texture so nothing sits on flat colour. The mesh is always present;
+  app.js adds a blurred still from settings.textureUrl on top when one is set.
+-->
+<div class="ambient" aria-hidden="true"></div>
 
 <!--
   Hairline architectural grid — the vertical rules with small × markers at the

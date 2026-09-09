@@ -22,6 +22,12 @@ function sanitize(settings) {
     heroVideoMobileUrl: cleanUrl(input.heroVideoMobileUrl),
     heroPosterUrl: cleanUrl(input.heroPosterUrl),
     heroHandAssetUrl: cleanUrl(input.heroHandAssetUrl),
+    /* Theme-aware brand marks. Empty falls back to the built-in SVG wordmark. */
+    logoLightUrl: cleanUrl(input.logoLightUrl),
+    logoDarkUrl: cleanUrl(input.logoDarkUrl),
+    /* A still pulled from real work, blurred and dimmed behind sections so
+       nothing sits on flat colour. Empty falls back to a CSS gradient mesh. */
+    textureUrl: cleanUrl(input.textureUrl),
     resultsStats: (Array.isArray(input.resultsStats) ? input.resultsStats : defaults.resultsStats)
       .slice(0, 12)
       .map((stat) => ({ label: clean(stat?.label, 60), value: clean(stat?.value, 60) }))
