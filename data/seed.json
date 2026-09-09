@@ -1,0 +1,118 @@
+{
+  "_readme": [
+    "Initial content loaded into the store by POST /api/seed (dev only).",
+    "Anything left empty here is content you still need to supply — every field",
+    "is editable from Web dev edit mode once Phase 8 is live, so nothing here is",
+    "hardcoded in the UI.",
+    "",
+    "Deliberately left blank rather than invented:",
+    "  - client taglines and videos (no Drive file IDs supplied yet)",
+    "  - client categories marked 'Uncategorised' (industry not confirmed)",
+    "  - settings.contact.whatsappNumber (only a partial number was supplied)",
+    "  - hero video / hand asset URLs (your own footage, not stock)",
+    "  - resultsStats values, websiteEntries, photography photos, brandingItems, jobs"
+  ],
+
+  "clients": [
+    {
+      "id": "akhi-ayman-ashhadu",
+      "name": "Akhi Ayman Ash-hadu",
+      "category": "Faith & Community",
+      "logoUrl": "",
+      "tagline": "",
+      "videos": [],
+      "websiteUrl": "",
+      "featured": true,
+      "isRecentWin": true,
+      "order": 1
+    },
+    {
+      "id": "the-revert-umrah",
+      "name": "The Revert Umrah",
+      "category": "Travel",
+      "logoUrl": "",
+      "tagline": "",
+      "videos": [],
+      "websiteUrl": "",
+      "featured": true,
+      "isRecentWin": true,
+      "order": 2
+    },
+    {
+      "id": "disly",
+      "name": "Disly",
+      "category": "Uncategorised",
+      "logoUrl": "",
+      "tagline": "",
+      "videos": [],
+      "websiteUrl": "",
+      "featured": true,
+      "isRecentWin": true,
+      "order": 3
+    },
+    {
+      "id": "abu-taymiyyah",
+      "name": "Abu Taymiyyah",
+      "category": "Faith & Community",
+      "logoUrl": "",
+      "tagline": "",
+      "videos": [],
+      "websiteUrl": "",
+      "featured": true,
+      "isRecentWin": true,
+      "order": 4
+    },
+    {
+      "id": "mehfil-ramadan",
+      "name": "Mehfil Ramadan",
+      "category": "Events",
+      "logoUrl": "",
+      "tagline": "",
+      "videos": [],
+      "websiteUrl": "",
+      "featured": true,
+      "isRecentWin": true,
+      "order": 5
+    }
+  ],
+
+  "jobs": [],
+
+  "photographyCategories": [
+    { "id": "food", "name": "Food", "coverPhotoUrl": "", "photos": [] },
+    { "id": "clothing", "name": "Clothing", "coverPhotoUrl": "", "photos": [] },
+    { "id": "products", "name": "Products", "coverPhotoUrl": "", "photos": [] },
+    { "id": "weddings", "name": "Weddings", "coverPhotoUrl": "", "photos": [] },
+    { "id": "events", "name": "Events", "coverPhotoUrl": "", "photos": [] }
+  ],
+
+  "brandingItems": [],
+
+  "websiteEntries": [],
+
+  "settings": {
+    "heroVideoDesktopUrl": "",
+    "heroVideoMobileUrl": "",
+    "heroPosterUrl": "",
+    "heroHandAssetUrl": "",
+    "resultsStats": [
+      { "label": "Views", "value": "" },
+      { "label": "Traffic", "value": "" },
+      { "label": "Revenue", "value": "" },
+      { "label": "Beautiful Websites", "value": "" },
+      { "label": "Branding", "value": "" }
+    ],
+    "aboutStats": {
+      "founded": "2024",
+      "clientsCount": "50",
+      "teamCount": "13"
+    },
+    "contact": {
+      "whatsappNumber": "",
+      "email": "marketing@advatar.co.uk"
+    },
+    "hiringGallery": []
+  },
+
+  "contactSubmissions": []
+}
