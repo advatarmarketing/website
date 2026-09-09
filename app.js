@@ -437,6 +437,28 @@ async function renderHome() {
       ? `<div class="hero-media"><img src="${poster}" alt="" decoding="async"></div>`
       : '';
 
+  /*
+    The hand plate. The supplied footage was a green screen; it's been keyed to a
+    pure-black background, so `mix-blend-mode: screen` drops the black and adds
+    only the gold light — which is the correct compositing for glowing particles
+    and gives the "merged into the background" look without needing an alpha
+    codec that Safari wouldn't play.
+
+    settings.heroHandAssetUrl still overrides it, and accepts an image or a video.
+  */
+  const handIsVideo = /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(hand);
+  const heroHand = hand
+    ? (handIsVideo
+        ? `<video class="hero-hand" autoplay muted loop playsinline preload="metadata" aria-hidden="true">
+             <source src="${hand}">
+           </video>`
+        : `<img class="hero-hand" src="${hand}" alt="" decoding="async">`)
+    : `<video class="hero-hand" autoplay muted loop playsinline preload="metadata"
+              poster="/assets/hero-hand-poster.jpg" aria-hidden="true">
+         <source src="/assets/hero-hand-mobile.mp4" media="(max-width: 720px)" type="video/mp4">
+         <source src="/assets/hero-hand.mp4" type="video/mp4">
+       </video>`;
+
   const teasers = [
     { n: '01', glyph: 'film', title: 'Video Marketing', copy: 'What we specialise in.', href: '/our-work#video' },
     { n: '02', glyph: 'layers', title: 'Website Marketing', copy: 'Creators of beautiful webpages & e-commerce.', href: '/our-work#websites' },
@@ -464,7 +486,10 @@ async function renderHome() {
     <section class="hero">
       ${heroMedia}
       <div class="hero-light"></div>
-      ${hand ? `<img class="hero-hand" src="${hand}" alt="" decoding="async">` : ''}
+      <!-- Grain over the hero's own background, but UNDER the hand and the
+           content — media never gets grained. -->
+      <div class="hero-grain" aria-hidden="true"></div>
+      ${heroHand}
       <div class="glow" style="--glow-w:46rem;--glow-h:46rem;--glow-a:0.5;right:-6rem;top:20%"></div>
 
       <div class="hero-content">
@@ -728,7 +753,7 @@ async function renderOurWork() {
               </figure>`).join('')}</div>`
           : emptyState('No featured reels yet', 'Mark clients as featured in edit mode to show them here.')}
 
-        <div style="margin-top:2rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center">
+        <div data-reveal style="margin-top:2rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center">
           <button type="button" class="btn btn--ghost" data-toggle="industries"
                   aria-expanded="false" aria-controls="industries">See more by industry</button>
           ${editOnly(`<button type="button" class="edit-chip" data-edit="clients">${icon('pencil')} Manage clients</button>`)}
@@ -919,7 +944,7 @@ async function renderAbout() {
       <div class="shell" data-reveal>
         <div class="glow" style="--glow-w:40rem;--glow-h:30rem;--glow-a:0.3;right:-8rem;top:-4rem"></div>
         ${eyebrow('About', 'diamond')}
-        <figure class="quote-block">
+        <figure class="quote-block" data-reveal style="--i:1">
           <blockquote class="display">Lost until the love for impact found me.</blockquote>
           <figcaption>Ar-Rayyan Monsur — Founder of Advatar</figcaption>
         </figure>
@@ -1099,7 +1124,7 @@ async function renderLookInside() {
         <div class="glow" style="--glow-w:34rem;--glow-h:26rem;--glow-a:0.24;right:-8rem;top:-4rem"></div>
         ${eyebrow('Look inside', 'eye')}
         <h1 class="display display--lg" data-reveal style="max-width:20ch">What it's actually like to work with us.</h1>
-        <p class="lede" style="margin-top:1.5rem">Start to finish.
+        <p class="lede" data-reveal style="--i:1;margin-top:1.5rem">Start to finish.
           <span class="dim">No mystery, no black box — here's every step.</span></p>
       </div>
     </section>
@@ -1208,7 +1233,7 @@ async function renderHiring() {
     <section class="section">
       <div class="shell">
         ${gallery.length
-          ? `<div class="bts-strip">${gallery.map((entry) =>
+          ? `<div class="bts-strip" data-reveal>${gallery.map((entry) =>
               mediaTile({
                 driveFileId: entry.driveFileId,
                 imageUrl: entry.imageUrl,
@@ -1231,7 +1256,7 @@ async function renderHiring() {
           <span class="dim">This is a place to stretch, take ownership, and do work you're proud to put your name on.</span>
         </p>
 
-        <div style="margin-top:clamp(2.5rem,6vw,4rem)">
+        <div data-reveal style="margin-top:clamp(2.5rem,6vw,4rem)">
           ${eyebrow('Our values in action', 'plus')}
           <p class="tiny" style="margin:-1.5rem 0 0">The principles that guide how we work and collaborate.</p>
           <ol class="values-list">
@@ -1575,9 +1600,11 @@ function mountHeroParallax() {
   if (!hero || prefersReducedMotion()) return;
 
   const layers = [
-    { node: $('.hero-media'), rate: 0.35 },
-    { node: $('.hero-light'), rate: 0.28 },
-    { node: $('.hero-hand'), rate: 0.45 },
+    { node: $('.hero-media'), rate: 0.35, base: '' },
+    { node: $('.hero-light'), rate: 0.28, base: '' },
+    // The hand is vertically centred with translateY(-50%); the parallax offset
+    // has to be added to that baseline rather than replacing it.
+    { node: $('.hero-hand'), rate: 0.45, base: '-50%' },
   ].filter((layer) => layer.node);
 
   const content = $('.hero-content');
@@ -1590,8 +1617,11 @@ function mountHeroParallax() {
     const height = hero.offsetHeight || 1;
     if (y > height) return;                    // hero is off-screen; nothing to do
 
-    for (const { node, rate } of layers) {
-      node.style.transform = `translate3d(0, ${y * rate}px, 0)`;
+    for (const { node, rate, base } of layers) {
+      const offset = base
+        ? `calc(${base} + ${(y * rate).toFixed(1)}px)`
+        : `${(y * rate).toFixed(1)}px`;
+      node.style.transform = `translate3d(0, ${offset}, 0)`;
     }
 
     // Fade + lift the content out over the first 70% of the hero.

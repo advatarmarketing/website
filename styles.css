@@ -68,8 +68,8 @@
   --reveal: 560ms;
 
   /* Layers */
-  --z-grid: 0;
-  --z-grain: 40;
+  --z-grid: -1;
+  --z-grain: -2;
   --z-nav: 60;
   --z-modal: 100;
   --z-toast: 120;
@@ -264,9 +264,24 @@ button, input, select, textarea { font: inherit; color: inherit; }
   every pixel of every page and doesn't scroll with content — that's what makes
   it read as film rather than as a background pattern.
 */
+/*
+  Film grain.
+
+  Two things make it read as baked-in film rather than a texture laid on top:
+
+  1. It sits BELOW everything in .app (z-index -2), so it grains the page and the
+     ambient wash but never the photos, Drive embeds or video. Media stays clean,
+     which is what you want — grain over a video looks like a dirty screen.
+  2. It jumps position on every "frame". Real grain is re-exposed each frame; a
+     motionless tile is the thing that reads as a static picture. steps(1) makes
+     each position hold rather than slide, which is what film actually does.
+
+  The element is oversized so the jumps never expose an edge.
+*/
 .grain {
   position: fixed;
-  inset: 0;
+  top: -60%; left: -60%;
+  width: 220%; height: 220%;
   z-index: var(--z-grain);
   pointer-events: none;
   background-image: url('/assets/grain.png');
@@ -274,6 +289,20 @@ button, input, select, textarea { font: inherit; color: inherit; }
   background-size: 512px 512px;
   opacity: var(--grain-opacity);
   mix-blend-mode: var(--grain-blend);
+  animation: grain-flicker 0.7s steps(1) infinite;
+  will-change: transform;
+}
+
+@keyframes grain-flicker {
+  0%   { transform: translate3d(0, 0, 0); }
+  12%  { transform: translate3d(-7%, 4%, 0); }
+  25%  { transform: translate3d(5%, -8%, 0); }
+  37%  { transform: translate3d(-4%, -6%, 0); }
+  50%  { transform: translate3d(8%, 3%, 0); }
+  62%  { transform: translate3d(-6%, 7%, 0); }
+  75%  { transform: translate3d(3%, -5%, 0); }
+  87%  { transform: translate3d(-8%, -3%, 0); }
+  100% { transform: translate3d(0, 0, 0); }
 }
 
 /*
@@ -875,17 +904,69 @@ a.glass-card:hover,
 }
 
 /* The layered "hand reaching for a screen" asset, when supplied. */
-.hero-hand {
+/*
+  Grain across the hero's own background. .hero is `isolation: isolate`, so the
+  page-level grain layer cannot reach inside it — this is the same texture,
+  scoped to the hero, sitting above the gradient but below the hand and the type.
+*/
+.hero-grain {
   position: absolute;
-  right: 2%;
-  top: 50%;
-  transform: translateY(-50%);
-  width: min(52%, 40rem);
+  top: -60%; left: -60%;
+  width: 220%; height: 220%;
   z-index: -1;
   pointer-events: none;
-  mix-blend-mode: screen;
+  background-image: url('/assets/grain.png');
+  background-repeat: repeat;
+  background-size: 512px 512px;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
+  animation: grain-flicker 0.7s steps(1) infinite;
+  will-change: transform;
 }
-@media (max-width: 900px) { .hero-hand { width: 88%; right: -8%; opacity: 0.75; } }
+
+/*
+  The keyed hand plate. Black background + `screen` means the black drops out and
+  only the gold light is added, so it reads as part of the gradient rather than a
+  rectangle pasted over it. z-index 0 keeps it ABOVE .hero-grain.
+*/
+.hero-hand {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: min(62%, 48rem);
+  z-index: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: 0.85;
+  /* Softens the plate's straight edges into the gradient. */
+  -webkit-mask-image: radial-gradient(75% 70% at 50% 50%, #000 55%, transparent 92%);
+  mask-image: radial-gradient(75% 70% at 50% 50%, #000 55%, transparent 92%);
+  transform: translateY(-50%);
+}
+video.hero-hand { height: auto; object-fit: contain; }
+
+/*
+  Screen blend has far less headroom on a pale ground — the plate washes out in
+  light mode. Push saturation and contrast so it still reads, without turning it
+  into a hard-edged rectangle.
+*/
+:root[data-theme='light'] .hero-hand {
+  opacity: 1;
+  filter: saturate(1.65) contrast(1.22) brightness(0.94);
+}
+/*
+  On mobile the headline fills the middle of the frame, so the plate drops into
+  the lower third — where the light already rises from — instead of running
+  straight through the type.
+*/
+@media (max-width: 900px) {
+  .hero-hand {
+    width: 145%;
+    right: -34%;
+    top: 74%;
+    opacity: 0.6;
+  }
+}
 
 .hero-content {
   position: relative;
@@ -1312,7 +1393,7 @@ a.glass-card:hover,
   grid-template-columns: 1fr;
 }
 @media (min-width: 900px) {
-  .timeline { grid-template-columns: minmax(0, 16rem) minmax(0, 1fr); align-items: start; }
+  .timeline { grid-template-columns: minmax(0, 21rem) minmax(0, 1fr); align-items: start; }
 }
 
 /* Progress rail lives in the 'Look Inside progress rail (R7)' section below. */
@@ -1639,51 +1720,74 @@ a.glass-card:hover,
 /* ============================== Living sheen on key type ================= */
 
 /*
-  A very slow gradient that drifts across headings, plus a faint glow. Both
-  stops are almost the same colour — the effect should read as the type quietly
-  breathing, not as a rainbow. --sheen-b is a near neighbour of --sheen-a, and
-  BOTH ends clear WCAG AA, so the animation can never dip text below contrast.
+  Headings carry a slow gradient that shifts between two tones of their OWN
+  colour — black to dark grey in light mode, off-white to warm grey in dark —
+  plus a soft glow behind the glyphs. Both ends of every gradient clear WCAG AA,
+  so the animation can never drift text below contrast.
 */
 :root {
   --sheen-a: var(--text-hi);
-  --sheen-b: #C9C2B4;              /* dark theme: a touch dimmer than --text-hi */
-  --sheen-glow: rgba(242, 169, 59, 0.16);
+  --sheen-b: #A9A395;                        /* dark theme: warm grey, 7.9:1 */
+  --sheen-glow: rgba(242, 169, 59, 0.34);
+  --sheen-glow-soft: rgba(242, 169, 59, 0.20);
 }
 :root[data-theme='light'] {
-  --sheen-b: #4A4239;              /* light theme: near-black lifted to dark grey */
-  --sheen-glow: rgba(201, 122, 46, 0.14);
+  --sheen-b: #5A5147;                        /* light theme: dark grey, 7.3:1 */
+  --sheen-glow: rgba(201, 122, 46, 0.26);
+  --sheen-glow-soft: rgba(201, 122, 46, 0.16);
 }
 
 @keyframes sheen-drift {
   0%   { background-position: 0% 50%; }
-  100% { background-position: 200% 50%; }
+  100% { background-position: -200% 50%; }
 }
 
 /*
-  Applied to display headings. background-clip:text needs a transparent colour,
-  so the gradient IS the text fill — if the animation is disabled the gradient
-  still paints, it simply stops moving.
+  Every heading-shaped element. background-clip:text needs a transparent fill,
+  so the gradient IS the text — with the animation off the gradient still paints,
+  it simply stops moving.
 */
 .display,
-.glow-text {
+.glow-text,
+.win-card h3,
+.card-body h3,
+.job-item h3,
+.timeline-step h3,
+.disclosure-title,
+.client-index-name,
+.case-study-head h3,
+.empty-state h3,
+.modal-head h2 {
   background-image: linear-gradient(
     100deg,
     var(--sheen-a) 0%,
-    var(--sheen-a) 32%,
+    var(--sheen-a) 28%,
+    var(--sheen-b) 42%,
     var(--sheen-b) 50%,
-    var(--sheen-a) 68%,
+    var(--sheen-a) 64%,
     var(--sheen-a) 100%
   );
-  background-size: 200% 100%;
+  background-size: 300% 100%;
   background-repeat: repeat-x;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
-  animation: sheen-drift 18s linear infinite;
-  /* The "very slight glow" — sits behind the glyphs, not on them. */
-  filter: drop-shadow(0 0 14px var(--sheen-glow));
+  animation: sheen-drift 9s linear infinite;
 }
+
+/* Display type gets the bigger halo; smaller headings a cheaper text-shadow. */
+.display,
+.glow-text { filter: drop-shadow(0 0 16px var(--sheen-glow)) drop-shadow(0 0 3px var(--sheen-glow-soft)); }
+
+.win-card h3,
+.card-body h3,
+.job-item h3,
+.timeline-step h3,
+.disclosure-title,
+.client-index-name,
+.case-study-head h3,
+.modal-head h2 { text-shadow: 0 0 18px var(--sheen-glow-soft); }
 
 /* Gradient-filled text can't also carry a background colour, so the stat
    numbers keep their own gold gradient and opt out of the sheen. */
@@ -1694,7 +1798,11 @@ a.glass-card:hover,
   background of its own to clip — it would render invisible. Give any such child
   a real fill back, except a .glow-word, which brings its own gradient.
 */
-.display > *:not(.glow-word) {
+.display > *:not(.glow-word),
+.glow-text > *:not(.glow-word),
+.disclosure-title > *:not(.glow-word),
+.timeline-step h3 > *:not(.glow-word),
+.modal-head h2 > *:not(.glow-word) {
   color: var(--text-hi);
   -webkit-text-fill-color: var(--text-hi);
 }
@@ -1702,33 +1810,38 @@ a.glass-card:hover,
 /* One word inside a line, e.g. a name or a key noun. */
 .glow-word {
   background-image: linear-gradient(100deg,
-    var(--gold-text) 0%, var(--gold-text) 35%, var(--gold-1) 50%, var(--gold-text) 65%, var(--gold-text) 100%);
-  background-size: 200% 100%;
+    var(--gold-text) 0%, var(--gold-text) 30%, var(--gold-1) 46%, var(--gold-text) 62%, var(--gold-text) 100%);
+  background-size: 300% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
-  animation: sheen-drift 14s linear infinite;
+  animation: sheen-drift 7s linear infinite;
 }
 
-/* Arrows and monoline icons get the same slow breath as a soft halo. */
+/*
+  Arrows and monoline icons breathe on the same cycle — a halo that swells and
+  settles rather than a blink.
+*/
 @keyframes glow-pulse {
-  0%, 100% { filter: drop-shadow(0 0 3px var(--sheen-glow)); }
-  50%      { filter: drop-shadow(0 0 9px var(--sheen-glow)); }
+  0%, 100% { filter: drop-shadow(0 0 2px var(--sheen-glow-soft)); opacity: 0.9; }
+  50%      { filter: drop-shadow(0 0 10px var(--sheen-glow)); opacity: 1; }
 }
 .link-arrow .icon,
 .results-row .result .icon,
 .eyebrow .icon,
 .carousel-nav .icon,
-.btn .icon { animation: glow-pulse 7s ease-in-out infinite; }
+.client-index-row .icon,
+.disclosure-meta .icon,
+.btn .icon { animation: glow-pulse 5s ease-in-out infinite; }
 
 /* Website screenshots and media frames get a drifting edge glow. */
 @keyframes frame-glow {
-  0%, 100% { box-shadow: 0 0 0 1px var(--glass-border), 0 0 18px -6px var(--sheen-glow); }
-  50%      { box-shadow: 0 0 0 1px var(--glass-border), 0 0 30px -4px var(--sheen-glow); }
+  0%, 100% { box-shadow: 0 0 0 1px var(--glass-border), 0 0 20px -8px var(--sheen-glow-soft); }
+  50%      { box-shadow: 0 0 0 1px var(--glass-border), 0 0 38px -4px var(--sheen-glow); }
 }
 .site-grid .media,
-.media--wide { animation: frame-glow 9s ease-in-out infinite; }
+.media--wide { animation: frame-glow 8s ease-in-out infinite; }
 
 /* ==================================================== Scroll reveals ===== */
 
@@ -1915,6 +2028,11 @@ a.glass-card:hover,
 
 /* ============================ Look Inside progress rail (R7) ============= */
 
+/*
+  A substantial rail: a thick track that fills as you scroll, with a large circle
+  at each of the ten steps. Sized so all ten still fit one viewport while stuck —
+  ~52px per step plus the sticky offset stays under 700px.
+*/
 .timeline-rail { display: none; position: relative; }
 
 @media (min-width: 900px) {
@@ -1922,30 +2040,31 @@ a.glass-card:hover,
     display: grid;
     gap: 0;
     position: sticky;
-    top: 8rem;
-    padding-left: 1.4rem;
+    top: 7rem;
+    padding-left: 3.25rem;
   }
   /* The unfilled track. */
   .timeline-rail::before {
     content: '';
     position: absolute;
-    left: 5px;
-    top: 0.55rem;
-    bottom: 0.55rem;
-    width: 2px;
-    border-radius: 2px;
+    left: 11px;
+    top: 1.05rem;
+    bottom: 1.05rem;
+    width: 6px;
+    border-radius: 6px;
     background: var(--hairline);
   }
   /* The fill, driven by --progress (0–1) from the scroll observer. */
   .timeline-rail::after {
     content: '';
     position: absolute;
-    left: 5px;
-    top: 0.55rem;
-    width: 2px;
-    height: calc((100% - 1.1rem) * var(--progress, 0));
-    border-radius: 2px;
+    left: 11px;
+    top: 1.05rem;
+    width: 6px;
+    height: calc((100% - 2.1rem) * var(--progress, 0));
+    border-radius: 6px;
     background: linear-gradient(to bottom, var(--gold-1), var(--gold-2));
+    box-shadow: 0 0 18px -2px var(--gold-glow);
     transition: height var(--slow) var(--ease-out);
   }
 }
@@ -1955,26 +2074,30 @@ a.glass-card:hover,
   display: flex;
   align-items: center;
   gap: 0.85rem;
-  padding-block: 0.42rem;
+  padding-block: 0.6rem;
   list-style: none;
 }
 .timeline-rail .dot {
   position: absolute;
-  left: -1.4rem;
-  width: 12px; height: 12px;
-  margin-left: 0;
+  left: -3.25rem;
+  width: 28px; height: 28px;
   border-radius: 50%;
-  border: 2px solid var(--hairline);
+  border: 3px solid var(--hairline);
   background: var(--bg);
   flex: none;
   transition: border-color var(--mid) var(--ease),
               background var(--mid) var(--ease),
-              box-shadow var(--mid) var(--ease);
+              box-shadow var(--mid) var(--ease),
+              transform var(--mid) var(--ease-out);
 }
-@media (max-width: 899px) { .timeline-rail .dot { position: static; } }
+@media (max-width: 899px) {
+  .timeline-rail .dot { position: static; width: 20px; height: 20px; }
+}
 
 .timeline-rail .rail-label {
-  font-size: 0.8125rem;
+  font-size: 1rem;
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
   color: var(--text-faint);
   transition: color var(--mid) var(--ease);
 }
@@ -1988,9 +2111,13 @@ a.glass-card:hover,
 .timeline-rail li[data-active='true'] .dot {
   border-color: var(--gold-1);
   background: var(--gold-1);
-  box-shadow: 0 0 0 5px var(--gold-glow);
+  box-shadow: 0 0 0 8px var(--gold-glow), 0 0 22px -2px var(--gold-1);
+  transform: scale(1.18);
 }
-.timeline-rail li[data-active='true'] .rail-label { color: var(--text-hi); }
+.timeline-rail li[data-active='true'] .rail-label {
+  color: var(--text-hi);
+  font-weight: 500;
+}
 
 /* ================================= Micro-interactions (R10) ============== */
 
@@ -2068,10 +2195,16 @@ a.glass-card:active, .glass-card--interactive:active { transform: translateY(-1p
 
   /* The sheen stops drifting but the gradient still paints, so headings keep
      their fill and never go transparent. */
-  .display, .glow-text, .glow-word { animation: none; }
+  .display, .glow-text, .glow-word, .win-card h3, .card-body h3, .job-item h3,
+  .timeline-step h3, .disclosure-title, .client-index-name, .case-study-head h3,
+  .empty-state h3, .modal-head h2 { animation: none; }
   .link-arrow .icon, .results-row .result .icon, .eyebrow .icon,
-  .carousel-nav .icon, .btn .icon { animation: none; filter: none; }
+  .carousel-nav .icon, .client-index-row .icon, .disclosure-meta .icon,
+  .btn .icon { animation: none; filter: none; opacity: 1; }
   .site-grid .media, .media--wide { animation: none; }
+
+  /* Grain holds still rather than flickering. */
+  .grain, .hero-grain { animation: none; }
 }
 
 /*
@@ -2079,7 +2212,9 @@ a.glass-card:active, .glass-card--interactive:active { transform: translateY(-1p
   would make every heading invisible. Restore a solid colour in that case.
 */
 @supports not ((-webkit-background-clip: text) or (background-clip: text)) {
-  .display, .glow-text, .glow-word {
+  .display, .glow-text, .glow-word, .win-card h3, .card-body h3, .job-item h3,
+  .timeline-step h3, .disclosure-title, .client-index-name, .case-study-head h3,
+  .empty-state h3, .modal-head h2 {
     background-image: none;
     color: var(--text-hi);
     -webkit-text-fill-color: var(--text-hi);
