@@ -117,6 +117,8 @@ const state = {
   photography: null,
   branding: null,
   jobs: null,
+  copy: null,
+  copyEditing: false,
   authed: false,
   authConfigured: false,
 };
@@ -128,13 +130,14 @@ const CACHE_KEYS = {
   photography: '/api/photography',
   branding: '/api/branding',
   jobs: '/api/jobs',
+  copy: '/api/copy',
 };
 
 /** Fetch a collection once and cache it. `invalidate(key)` forces a refetch. */
 async function load(key) {
   if (state[key] != null) return state[key];
   const payload = await api.get(CACHE_KEYS[key]);
-  state[key] = key === 'settings' ? payload.settings : payload.items;
+  state[key] = key === 'settings' ? payload.settings : key === 'copy' ? payload.copy : payload.items;
   return state[key];
 }
 
@@ -166,14 +169,14 @@ let openModalCleanup = null;
  * Focus-trapped dialog. Escape closes, click-outside closes, focus returns to
  * whatever opened it.
  */
-function openModal({ title, subtitle = '', body, onMount, labelledBy = 'modal-title' }) {
+function openModal({ title, subtitle = '', body, onMount, labelledBy = 'modal-title', className = '' }) {
   closeModal();
 
   const opener = document.activeElement;
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
   backdrop.innerHTML = `
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="${esc(labelledBy)}">
+    <div class="modal ${esc(className)}" role="dialog" aria-modal="true" aria-labelledby="${esc(labelledBy)}">
       <div class="modal-head">
         <div>
           <h2 id="${esc(labelledBy)}">${esc(title)}</h2>
@@ -261,18 +264,79 @@ const THEME_KEY = 'advatar-theme';
 const currentTheme = () =>
   document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
 
-function applyTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
-  try {
-    localStorage.setItem(THEME_KEY, theme);
-  } catch {
-    /* Private mode — the choice just won't persist. */
+/**
+ * Switch theme. `persist` records it as the visitor's choice — the intro sweep
+ * doesn't, because nobody chose it. Where the View Transitions API exists the
+ * whole page crossfades: gradients can't be CSS-transitioned, so without it the
+ * hero would snap from one theme to the other.
+ */
+function applyTheme(theme, { persist = true, duration = 450 } = {}) {
+  const swap = () => {
+    document.documentElement.setAttribute('data-theme', theme);
+    // The nav logo differs per theme, so re-render whichever marks are on screen.
+    $$('[data-brand]').forEach((node) => { node.innerHTML = brandInner(); });
+    syncThemeToggles();
+  };
+
+  if (persist) {
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      /* Private mode — the choice just won't persist. */
+    }
   }
-  // The nav logo differs per theme, so re-render whichever marks are on screen.
-  $$('[data-brand]').forEach((node) => { node.innerHTML = brandInner(); });
+
+  if (document.startViewTransition && !prefersReducedMotion()) {
+    document.documentElement.style.setProperty('--theme-swap', `${duration}ms`);
+    return document.startViewTransition(swap).finished.catch(() => {});
+  }
+  swap();
+  return Promise.resolve();
 }
 
 const toggleTheme = () => applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
+
+/**
+ * First-visit intro: the page opens in light, then sweeps to dark while the
+ * toggle is spotlighted with a hint, so people learn the view can be switched.
+ * index.html decides whether it plays (once per browser, or ?intro=1).
+ */
+async function playThemeIntro() {
+  const root = document.documentElement;
+  if (root.getAttribute('data-theme-intro') !== 'pending') return;
+  root.setAttribute('data-theme-intro', 'playing');
+  try { localStorage.setItem('advatar-intro-seen', '1'); } catch { /* private mode */ }
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const toggles = () => $$('[data-theme-toggle]');
+
+  await sleep(450);                     // a beat in light, so the change is noticed
+  toggles().forEach((node) => node.classList.add('theme-toggle--spotlight'));
+  const hint = showThemeHint();
+  await sleep(250);
+  await applyTheme('dark', { persist: false, duration: 950 });
+  await sleep(2300);
+  toggles().forEach((node) => node.classList.remove('theme-toggle--spotlight'));
+  hint?.classList.add('theme-hint--out');
+  await sleep(300);
+  hint?.remove();
+  root.removeAttribute('data-theme-intro');
+}
+
+/** The small "you can switch this" pill that points at the nav toggle. */
+function showThemeHint() {
+  const toggle = $('.nav [data-theme-toggle]');
+  if (!toggle) return null;
+  const rect = toggle.getBoundingClientRect();
+  const hint = document.createElement('div');
+  hint.className = 'theme-hint';
+  hint.setAttribute('role', 'status');
+  hint.textContent = 'Switch light / dark anytime';
+  hint.style.top = `${Math.round(rect.bottom + 14)}px`;
+  hint.style.right = `${Math.max(12, Math.round(window.innerWidth - rect.right - 6))}px`;
+  document.body.append(hint);
+  return hint;
+}
 
 const themeToggleButton = (extraClass = '') => `
   <button type="button" class="icon-btn theme-toggle ${extraClass}" data-theme-toggle
@@ -309,7 +373,8 @@ function brandInner() {
 
 function navFragment(path) {
   const link = ({ href, label }) =>
-    `<li><a href="${href}"${href === path ? ' aria-current="page"' : ''}>${esc(label)}</a></li>`;
+    `<li><a href="${href}"${href === path ? ' aria-current="page"' : ''}
+            data-copy="nav.${copyKey(label)}">${esc(label)}</a></li>`;
 
   return `
   <header class="nav" data-scrolled="false">
@@ -348,12 +413,13 @@ function footerFragment(settings) {
       <div class="footer-inner">
         <div class="stack">
           <a class="brand" href="/" data-brand>${brandInner()}</a>
-          <p class="tiny" style="max-width:26ch">Impact-focused marketing. Video at the core.</p>
+          <p class="tiny" style="max-width:26ch" data-copy="footer.tagline">Impact-focused marketing. Video at the core.</p>
         </div>
 
         <nav aria-label="Footer">
           <ul class="footer-links">
-            ${NAV_ITEMS.map((item) => `<li><a href="${item.href}">${esc(item.label)}</a></li>`).join('')}
+            ${NAV_ITEMS.map((item) =>
+              `<li><a href="${item.href}" data-copy="nav.${copyKey(item.label)}">${esc(item.label)}</a></li>`).join('')}
           </ul>
         </nav>
 
@@ -377,17 +443,35 @@ function footerFragment(settings) {
   </footer>`;
 }
 
-/** Section eyebrow: monoline glyph + label. */
-const eyebrow = (label, glyph = 'diamond') =>
-  `<p class="eyebrow">${icon(glyph)}<span>${esc(label)}</span></p>`;
+/** Stable copy-key fragment from a label: "We're Hiring" → "we-re-hiring". */
+const copyKey = (value) => String(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+/** Section eyebrow: monoline glyph + label (editable, keyed by its label). */
+const eyebrow = (label, glyph = 'diamond', key = `eyebrow.${copyKey(label)}`) =>
+  `<p class="eyebrow">${icon(glyph)}<span data-copy="${esc(key)}">${esc(label)}</span></p>`;
+
+const driveThumb = (fileId, width = 720) =>
+  `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w${width}`;
 
 /** Media tile: a Drive embed, an image, or a labelled empty placeholder. */
 function mediaTile({ driveFileId, imageUrl, title, ratio = 'reel', empty = 'Asset coming soon' }) {
   const shape = `media media--${ratio}`;
+  /*
+    Drive videos render as a poster + play button, not an inline iframe. Drive's
+    player carries its own header bar and chunky controls, and inside a small
+    9:16 tile that chrome crowds and misaligns the picture. The poster fills the
+    tile exactly; playback opens in a lightbox sized to the video. A page of reels
+    also loads a few images instead of a dozen embedded players.
+  */
   if (driveFileId) {
-    return `<div class="${shape}"><iframe src="${driveEmbed(driveFileId)}"
-      title="${esc(title || 'Video')}" allow="autoplay; encrypted-media"
-      referrerpolicy="no-referrer" loading="lazy" allowfullscreen></iframe></div>`;
+    return `<button type="button" class="${shape} media--video" data-play="${esc(driveFileId)}"
+              data-title="${esc(title || 'Video')}" aria-label="Play ${esc(title || 'video')}">
+      <img class="media-thumb-fill" src="${esc(driveThumb(driveFileId))}" alt="" loading="lazy"
+           decoding="async" referrerpolicy="no-referrer">
+      <img class="media-thumb" src="${esc(driveThumb(driveFileId))}" alt="" loading="lazy"
+           decoding="async" referrerpolicy="no-referrer">
+      <span class="media-play" aria-hidden="true">${icon('play')}</span>
+    </button>`;
   }
   const url = safeUrl(imageUrl);
   if (url) {
@@ -397,11 +481,47 @@ function mediaTile({ driveFileId, imageUrl, title, ratio = 'reel', empty = 'Asse
 }
 
 /**
+ * A client's videos as one row that drifts slowly sideways, like the home
+ * carousel. mountCarousel decides at runtime whether the row is long enough to
+ * loop; one or two videos simply sit still.
+ */
+function videoCarousel(client) {
+  return `<div class="carousel carousel--videos" data-carousel>
+    <div class="carousel-track" data-autoscroll="true">
+      ${client.videos.map((video, index) => `
+        <figure class="video-card" style="--i:${index}">
+          ${mediaTile({ driveFileId: video.driveFileId, title: `${client.name} — ${video.title}` })}
+          <figcaption class="tiny">${esc(video.title)}</figcaption>
+        </figure>`).join('')}
+    </div>
+  </div>`;
+}
+
+/**
  * Admin-only markup. Returns nothing at all unless there is a live session, so
  * the edit surface is absent from the DOM for visitors rather than merely
  * hidden with CSS. Writes are re-authorised server-side regardless.
  */
 const editOnly = (html) => (state.authed ? html : '');
+
+/* ----------------------------------------------------------- Site copy --- */
+
+/*
+  Every piece of fixed text carries a data-copy key. The default text lives in
+  the markup; an override from /api/copy replaces it straight after render, in
+  the same task, so there is no flash of the old wording. Edit mode's "Edit
+  text" writes overrides and "Reset" deletes one — an empty store is simply the
+  site as designed.
+*/
+const renderCopy = (text) => esc(text).replace(/\n/g, '<br>');
+
+function applyCopy(root = document) {
+  const copy = state.copy ?? {};
+  $$('[data-copy]', root).forEach((node) => {
+    const value = copy[node.dataset.copy];
+    if (typeof value === 'string' && value) node.innerHTML = renderCopy(value);
+  });
+}
 
 const emptyState = (heading, message) => `
   <div class="empty-state">
@@ -465,8 +585,8 @@ async function renderHome() {
     { n: '03', glyph: 'diamond', title: 'Branding', copy: 'Elevating your brand.', href: '/our-work#branding' },
   ];
 
-  const winCard = (client, index, isClone = false) => `
-    <article class="win-card"${isClone ? ' aria-hidden="true"' : ' data-reveal'} style="--i:${index}">
+  const winCard = (client, index) => `
+    <article class="win-card" data-reveal style="--i:${index}">
       ${mediaTile({
         driveFileId: client.videos?.[0]?.driveFileId,
         title: `${client.name} — reel`,
@@ -474,9 +594,8 @@ async function renderHome() {
       })}
       <div class="win-meta">
         <h3>${esc(client.name)}</h3>
-        <button type="button" class="link-arrow" data-win="${esc(client.id)}"
-                ${isClone ? 'tabindex="-1"' : ''}>
-          <span>See more</span>${icon('arrowRight')}
+        <button type="button" class="link-arrow" data-win="${esc(client.id)}">
+          <span data-copy="common.see-more">See more</span>${icon('arrowRight')}
         </button>
       </div>
     </article>`;
@@ -493,17 +612,17 @@ async function renderHome() {
       <div class="glow" style="--glow-w:46rem;--glow-h:46rem;--glow-a:0.5;right:-6rem;top:20%"></div>
 
       <div class="hero-content">
-        <h1 class="display display--xl">Marketing that leaves a mark,<br>not just a metric.</h1>
+        <h1 class="display display--xl" data-copy="home.hero.title">Marketing that leaves a mark,<br>not just a metric.</h1>
         <div class="hero-cta">
-          <a class="btn btn--gold" href="/our-work">See our work ${icon('arrowRight')}</a>
+          <a class="btn btn--gold" href="/our-work"><span data-copy="home.hero.cta">See our work</span> ${icon('arrowRight')}</a>
         </div>
       </div>
 
       <div class="hero-foot">
-        <p>Video marketing at the core — with web design, photography, branding and paid ads built around it.</p>
+        <p data-copy="home.hero.foot">Video marketing at the core — with web design, photography, branding and paid ads built around it.</p>
         <div class="with-mark">
           ${icon('cross')}
-          <p>An impact-focused agency for clients who want the whole picture handled, properly.</p>
+          <p data-copy="home.hero.note">An impact-focused agency for clients who want the whole picture handled, properly.</p>
         </div>
       </div>
     </section>
@@ -513,20 +632,17 @@ async function renderHome() {
         <div class="section-head" data-reveal>
           <div>
             ${eyebrow('Recent wins', 'plus')}
-            <h2 class="display display--lg">The latest work.</h2>
+            <h2 class="display display--lg" data-copy="home.wins.title">The latest work.</h2>
           </div>
-          <p class="lede">Fresh off the edit.
-            <span class="dim">A snapshot of who we've been building for lately.</span></p>
+          <p class="lede"><span data-copy="home.wins.lede">Fresh off the edit.</span>
+            <span class="dim" data-copy="home.wins.lede-dim">A snapshot of who we've been building for lately.</span></p>
         </div>
         ${wins.length
           ? `<div class="carousel" data-carousel>
+               <!-- mountCarousel adds the loop clones itself, and only when the
+                    row is wider than the screen. -->
                <div class="carousel-track" data-autoscroll="true">
-                 <!-- map() passes the array as a third argument, so call winCard
-                      explicitly — otherwise every card is flagged as a clone. -->
                  ${wins.map((client, i) => winCard(client, i)).join('')}
-                 <!-- A second pass of the same cards, so the slow drift can wrap
-                      around seamlessly. Hidden from assistive tech. -->
-                 ${wins.map((client, i) => winCard(client, i, true)).join('')}
                </div>
                <button type="button" class="icon-btn carousel-nav" data-carousel-next
                        aria-label="Scroll to more recent wins">${icon('arrowRight')}</button>
@@ -550,8 +666,8 @@ async function renderHome() {
             <a class="glass-card" href="${teaser.href}" data-reveal style="--i:${index}">
               <span class="card-index">${icon(teaser.glyph)} ${teaser.n} Service</span>
               <div class="card-body">
-                <h3>${esc(teaser.title)}</h3>
-                <p>${esc(teaser.copy)}</p>
+                <h3 data-copy="home.teaser.${teaser.n}.title">${esc(teaser.title)}</h3>
+                <p data-copy="home.teaser.${teaser.n}.copy">${esc(teaser.copy)}</p>
               </div>
             </a>`).join('')}
         </div>
@@ -561,11 +677,12 @@ async function renderHome() {
 }
 
 function mountHome() {
-  $$('[data-win]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const client = state.clients?.find((item) => item.id === button.dataset.win);
-      if (client) openClientModal(client);
-    });
+  // Delegated: the carousel's loop clones are created after this runs.
+  $('main')?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-win]');
+    if (!button) return;
+    const client = state.clients?.find((item) => item.id === button.dataset.win);
+    if (client) openClientModal(client);
   });
 
   mountCarousel($('[data-carousel]'));
@@ -579,14 +696,9 @@ function openClientModal(client) {
     title: client.name,
     subtitle: client.tagline || '',
     body: videos.length
-      ? `<div class="reel-grid">${videos
-          .map((video) => `
-            <figure style="margin:0;display:grid;gap:0.6rem">
-              ${mediaTile({ driveFileId: video.driveFileId, title: `${client.name} — ${video.title}` })}
-              <figcaption class="tiny">${esc(video.title)}</figcaption>
-            </figure>`)
-          .join('')}</div>`
+      ? videoCarousel(client)
       : emptyState('No videos yet', `Videos for ${client.name} haven't been added yet.`),
+    onMount(host) { mountCarousel($('[data-carousel]', host)); },
   });
 }
 
@@ -622,11 +734,15 @@ async function renderOurWork() {
   };
 
   /* Group clients by industry for the unravel panels. */
-  const industries = [...clients.reduce((map, client) => {
+  const grouped = clients.reduce((map, client) => {
     const key = client.category || 'Uncategorised';
     map.set(key, [...(map.get(key) ?? []), client]);
     return map;
-  }, new Map())].sort((a, b) => categoryRank(a[0]) - categoryRank(b[0]) || a[0].localeCompare(b[0]));
+  }, new Map());
+  // Personal Brands & Creators always has its place, even before any are added.
+  if (!grouped.has('Personal Brands & Creators')) grouped.set('Personal Brands & Creators', []);
+  const industries = [...grouped]
+    .sort((a, b) => categoryRank(a[0]) - categoryRank(b[0]) || a[0].localeCompare(b[0]));
 
   const resultsRow = stats.length
     ? stats.map((stat) =>
@@ -651,11 +767,7 @@ async function renderOurWork() {
         </div>
         <div class="disclosure-panel" id="client-${esc(client.id)}" hidden>
           ${client.videos?.length
-            ? `<div class="reel-grid" style="margin-top:1rem">${client.videos.map((video) => `
-                <figure style="margin:0;display:grid;gap:0.5rem">
-                  ${mediaTile({ driveFileId: video.driveFileId, title: `${client.name} — ${video.title}` })}
-                  <figcaption class="tiny">${esc(video.title)}</figcaption>
-                </figure>`).join('')}</div>`
+            ? `<div style="margin-top:1rem">${videoCarousel(client)}</div>`
             : `<p class="tiny" style="margin-top:1rem">No videos added for ${esc(client.name)} yet.</p>`}
         </div>
       </div>
@@ -672,15 +784,22 @@ async function renderOurWork() {
         </span>
       </button>
       <div class="disclosure-panel" id="industry-${esc(name)}" hidden>
-        <div class="stack-2" style="grid-template-columns:minmax(0,20rem) minmax(0,1fr);display:grid;align-items:start">
+        ${group.length ? `
+        <div class="industry-layout">
           <div>
-            ${mediaTile({ driveFileId: group[0]?.videos?.[0]?.driveFileId, title: `${name} — key video`, empty: 'Key video coming soon' })}
+            ${mediaTile({
+              // The key video is the first client in the group that has one.
+              driveFileId: group.find((client) => client.videos?.length)?.videos[0].driveFileId,
+              title: `${name} — key video`,
+              empty: 'Key video coming soon',
+            })}
             <ul class="industry-names">
               ${group.slice(0, 3).map((client) => `<li>${esc(client.name)}</li>`).join('')}
             </ul>
           </div>
           <div>${group.map(clientRow).join('')}</div>
-        </div>
+        </div>`
+        : `<p class="tiny" style="padding-block:0.25rem 1.25rem">No clients in ${esc(name)} yet — add them in edit mode.</p>`}
       </div>
     </div>`;
 
@@ -695,7 +814,7 @@ async function renderOurWork() {
         </span>
       </button>
       <div class="disclosure-panel" id="photo-${esc(category.id)}" hidden data-animate="true">
-        <div style="display:grid;gap:1rem;grid-template-columns:minmax(0,18rem) minmax(0,1fr);align-items:start">
+        <div class="photo-layout">
           ${mediaTile({ imageUrl: category.coverPhotoUrl, title: `${category.name} — cover`, ratio: 'square', empty: 'Cover photo coming soon' })}
           ${category.photos?.length
             ? `<div class="photo-grid">${category.photos.map((photo, index) =>
@@ -723,12 +842,11 @@ async function renderOurWork() {
     <section class="section" id="results">
       <div class="shell">
         <div class="glow" style="--glow-w:34rem;--glow-h:26rem;--glow-a:0.28;left:-10rem;top:-6rem"></div>
-        <h2 class="display display--lg" data-reveal style="margin-bottom:clamp(1.75rem,4vw,2.75rem)">
-          Our Drive? Results.
-        </h2>
+        <h2 class="display display--lg" data-reveal data-copy="work.results.title"
+            style="margin-bottom:clamp(1.75rem,4vw,2.75rem)">Our Drive? Results.</h2>
         <div class="results-row" data-reveal>${resultsRow}</div>
         <div style="margin-top:1.5rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center">
-          <button type="button" class="link-arrow" data-results-modal><span>See more</span>${icon('arrowRight')}</button>
+          <button type="button" class="link-arrow" data-results-modal><span data-copy="work.results.more">See more</span>${icon('arrowRight')}</button>
           ${editOnly(`<button type="button" class="edit-chip" data-edit="results">${icon('pencil')} Edit results</button>`)}
         </div>
       </div>
@@ -739,10 +857,10 @@ async function renderOurWork() {
         <div class="section-head" data-reveal>
           <div>
             ${eyebrow('Video marketing', 'film')}
-            <h2 class="display display--lg">Selected reels.</h2>
+            <h2 class="display display--lg" data-copy="work.video.title">Selected reels.</h2>
           </div>
-          <p class="lede">The work that moves numbers.
-            <span class="dim">Grouped by industry so you can find your own.</span></p>
+          <p class="lede"><span data-copy="work.video.lede">The work that moves numbers.</span>
+            <span class="dim" data-copy="work.video.lede-dim">Grouped by industry so you can find your own.</span></p>
         </div>
 
         ${featured.length
@@ -753,10 +871,18 @@ async function renderOurWork() {
               </figure>`).join('')}</div>`
           : emptyState('No featured reels yet', 'Mark clients as featured in edit mode to show them here.')}
 
-        <div data-reveal style="margin-top:2rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center">
+        <!-- Both ways into the client work, side by side. -->
+        <div class="work-actions" data-reveal>
           <button type="button" class="btn btn--ghost" data-toggle="industries"
-                  aria-expanded="false" aria-controls="industries">See more by industry</button>
-          ${editOnly(`<button type="button" class="edit-chip" data-edit="clients">${icon('pencil')} Manage clients</button>`)}
+                  aria-expanded="false" aria-controls="industries">
+            ${icon('film')}<span data-copy="work.video.by-industry">See more by industry</span>
+          </button>
+          <button type="button" class="btn btn--ghost" data-toggle="all-clients"
+                  aria-expanded="false" aria-controls="all-clients">
+            ${icon('layers')}<span data-copy="work.video.all-clients">View all client work</span>
+          </button>
+          ${editOnly(`<button type="button" class="edit-chip" data-edit="clients">${icon('pencil')} Manage clients</button>
+            <button type="button" class="edit-chip" data-edit="sync-clients">${icon('layers')} Sync clients</button>`)}
         </div>
 
         <div class="disclosure-panel" id="industries" hidden style="margin-top:2rem">
@@ -764,23 +890,18 @@ async function renderOurWork() {
             ? industries.map(industryPanel).join('')
             : emptyState('No clients yet', 'Add clients in edit mode and they will group by industry here.')}
 
-          <!-- The full client index, behind its own button so it doesn't
-               overwhelm the showcase above. -->
-          <div class="all-clients">
-            <button type="button" class="btn btn--ghost" data-toggle="all-clients"
-                    aria-expanded="false" aria-controls="all-clients">
-              ${icon('layers')} View all clients
-            </button>
-          </div>
+        </div>
 
-          <div class="disclosure-panel all-clients-panel" id="all-clients" hidden data-animate="true">
+        <!-- The full client index: its own panel, opened by the button beside
+             "See more by industry" rather than nested inside the industry view. -->
+        <div class="disclosure-panel all-clients-panel" id="all-clients" hidden data-animate="true">
             <div class="section-head" style="margin-bottom:1.5rem">
               <div>
-                ${eyebrow('All clients', 'layers')}
-                <h3 class="display display--md">Everyone we've worked with.</h3>
+                ${eyebrow('All client work', 'layers')}
+                <h3 class="display display--md" data-copy="work.all.title">Everyone we've worked with.</h3>
               </div>
               <p class="lede">${clients.length} client${clients.length === 1 ? '' : 's'}.
-                <span class="dim">Listed once each, under their primary category.</span></p>
+                <span class="dim" data-copy="work.all.lede-dim">Listed once each, under their primary category.</span></p>
             </div>
 
             ${industries.map(([name, group]) => `
@@ -803,19 +924,15 @@ async function renderOurWork() {
                       </button>
                       <div class="disclosure-panel" id="idx-${esc(client.id)}" hidden data-animate="true">
                         ${client.videos?.length
-                          ? `<div class="reel-grid" style="padding-block:1rem">${client.videos.map((video) => `
-                              <figure style="display:grid;gap:0.5rem">
-                                ${mediaTile({ driveFileId: video.driveFileId, title: `${client.name} — ${video.title}` })}
-                                <figcaption class="tiny">${esc(video.title)}</figcaption>
-                              </figure>`).join('')}</div>`
+                          ? `<div style="padding-block:1rem 1.25rem">${videoCarousel(client)}</div>`
                           : `<p class="tiny" style="padding-block:0.85rem 1.25rem">
                                No work added for ${esc(client.name)} yet — add their Drive links in edit mode.
                              </p>`}
                       </div>
                     </li>`).join('')}
+                  ${group.length ? '' : `<li class="client-index-empty tiny">No clients in ${esc(name)} yet — add them in edit mode.</li>`}
                 </ul>
               </div>`).join('')}
-          </div>
         </div>
       </div>
     </section>
@@ -825,7 +942,7 @@ async function renderOurWork() {
         <div class="section-head" data-reveal>
           <div>
             ${eyebrow('Websites', 'layers')}
-            <h2 class="display display--lg">Beautifully designed and crafted websites,<br>just like this one.</h2>
+            <h2 class="display display--lg" data-copy="work.websites.title">Beautifully designed and crafted websites,<br>just like this one.</h2>
           </div>
         </div>
         ${websites.length
@@ -833,7 +950,7 @@ async function renderOurWork() {
              ${websites.length > 3 ? `
                <div style="margin-top:1.5rem">
                  <button type="button" class="btn btn--ghost" data-toggle="more-sites"
-                         aria-expanded="false" aria-controls="more-sites">View more</button>
+                         aria-expanded="false" aria-controls="more-sites"><span data-copy="work.websites.more">View more</span></button>
                </div>
                <div class="disclosure-panel" id="more-sites" hidden data-animate="true" style="margin-top:1.5rem">
                  <div class="site-grid">${websites.slice(3).map(siteCard).join('')}</div>
@@ -850,7 +967,7 @@ async function renderOurWork() {
     <section class="section" id="photography">
       <div class="shell">
         ${eyebrow('Photography', 'image')}
-        <h2 class="display display--lg" data-reveal style="margin-bottom:2.5rem">Shot properly, lit properly.</h2>
+        <h2 class="display display--lg" data-reveal data-copy="work.photo.title" style="margin-bottom:2.5rem">Shot properly, lit properly.</h2>
         ${photography.length
           ? photography.map(photoCategory).join('')
           : emptyState('No categories yet', 'Add photography categories in edit mode.')}
@@ -865,7 +982,7 @@ async function renderOurWork() {
     <section class="section backdrop-warm" id="branding">
       <div class="shell">
         ${eyebrow('Branding', 'diamond')}
-        <h2 class="display display--lg" data-reveal style="margin-bottom:2.5rem">Elevating your brand.</h2>
+        <h2 class="display display--lg" data-reveal data-copy="work.branding.title" style="margin-bottom:2.5rem">Elevating your brand.</h2>
         ${branding.length
           ? `<div class="branding-masonry">${branding.map((item, index) => `
               <figure data-reveal style="--i:${index}">
@@ -912,17 +1029,14 @@ function openCaseStudies() {
               ? `<p class="lede">${esc(client.tagline)}</p>`
               : `<p class="tiny">Add a one-line result for ${esc(client.name)} in edit mode.</p>`}
             ${client.videos?.length
-              ? `<div class="reel-grid">${client.videos.map((video) => `
-                  <figure style="display:grid;gap:0.5rem">
-                    ${mediaTile({ driveFileId: video.driveFileId, title: `${client.name} — ${video.title}` })}
-                    <figcaption class="tiny">${esc(video.title)}</figcaption>
-                  </figure>`).join('')}</div>`
+              ? videoCarousel(client)
               : `<div class="reel-grid">${mediaTile({ title: client.name, empty: 'Video coming soon' })}</div>`}
           </article>`).join('')}</div>`
       : emptyState(
           'No case studies yet',
           'Flag clients as case studies in edit mode — recent wins are included by default.'
         ),
+    onMount(host) { $$('[data-carousel]', host).forEach((node) => mountCarousel(node)); },
   });
 }
 
@@ -935,7 +1049,7 @@ async function renderAbout() {
   const stat = (num, label, index = 0) => `
     <div class="glass-card stat" data-reveal style="--i:${index}">
       <span class="num">${esc(num || '—')}</span>
-      <span class="label micro">${esc(label)}</span>
+      <span class="label micro" data-copy="about.stat.${copyKey(label)}">${esc(label)}</span>
     </div>`;
 
   return `
@@ -945,18 +1059,15 @@ async function renderAbout() {
         <div class="glow" style="--glow-w:40rem;--glow-h:30rem;--glow-a:0.3;right:-8rem;top:-4rem"></div>
         ${eyebrow('About', 'diamond')}
         <figure class="quote-block" data-reveal style="--i:1">
-          <blockquote class="display">Lost until the love for impact found me.</blockquote>
-          <figcaption>Ar-Rayyan Monsur — Founder of Advatar</figcaption>
+          <blockquote class="display" data-copy="about.quote">Lost until the love for impact found me.</blockquote>
+          <figcaption data-copy="about.quote-by">Ar-Rayyan Monsur — Founder of Advatar</figcaption>
         </figure>
       </div>
     </section>
 
     <section class="section">
       <div class="shell stack-2">
-        <p class="lede" data-reveal style="max-width:54ch">
-          Founded in ${esc(founded || '2024')}, Advatar has worked with over
-          ${esc(clientsCount || '50')} clients.
-        </p>
+        <p class="lede" data-reveal data-copy="about.founded" style="max-width:54ch">Founded in ${esc(founded || '2024')}, Advatar has worked with over ${esc(clientsCount || '50')} clients.</p>
 
         <div class="stat-row" data-reveal>
           ${stat(founded, 'Founded', 0)}
@@ -970,14 +1081,9 @@ async function renderAbout() {
         `)}
 
         <div class="stack-2">
-          <p class="lede" data-reveal style="max-width:54ch">
-            The founder, Ar-Rayyan Monsur, has been working in marketing since 2021
-            and graduated in Economics at the University of Leicester.
-          </p>
-          <p class="lede" data-reveal style="max-width:54ch">
-            The team now expands to ${esc(teamCount || '13')} dedicated team members and is growing.
-            Want to join the team, <a class="text-link" href="/hiring">register your interest here</a>
-          </p>
+          <p class="lede" data-reveal data-copy="about.founder" style="max-width:54ch">The founder, Ar-Rayyan Monsur, has been working in marketing since 2021 and graduated in Economics at the University of Leicester.</p>
+          <p class="lede" data-reveal style="max-width:54ch"><span data-copy="about.team">The team now expands to ${esc(teamCount || '13')} dedicated team members and is growing. Want to join the team,</span>
+            <a class="text-link" href="/hiring" data-copy="about.team-link">register your interest here</a></p>
         </div>
       </div>
     </section>
@@ -987,9 +1093,9 @@ async function renderAbout() {
       <div class="shell ihsan-body" data-reveal>
         ${eyebrow('Ihsan', 'plus')}
         <p class="lede" style="max-width:56ch;font-size:clamp(1.0625rem,1.6vw,1.375rem)">
-          Our aim is to work upon the term of &ldquo;Ihsan&rdquo;
-          (<span lang="ar" class="ihsan-inline">إحسان</span>) or in other words, Excellence
-          &mdash; and we never release a bit of work that we&rsquo;re not impressed by ourselves.
+          <span data-copy="about.ihsan-lead">Our aim is to work upon the term of &ldquo;Ihsan&rdquo;</span>
+          (<span lang="ar" class="ihsan-inline">إحسان</span>)
+          <span data-copy="about.ihsan-rest">or in other words, Excellence &mdash; and we never release a bit of work that we&rsquo;re not impressed by ourselves.</span>
         </p>
       </div>
     </section>
@@ -1004,8 +1110,8 @@ async function renderContact() {
 
   const whatsapp = whatsappNumber
     ? `<a class="btn btn--gold" href="https://wa.me/${esc(whatsappNumber)}" target="_blank" rel="noopener noreferrer">
-         ${icon('whatsapp')} WhatsApp us</a>`
-    : `<button type="button" class="btn" disabled aria-describedby="wa-note">${icon('whatsapp')} WhatsApp us</button>
+         ${icon('whatsapp')}<span data-copy="contact.whatsapp-cta">WhatsApp us</span></a>`
+    : `<button type="button" class="btn" disabled aria-describedby="wa-note">${icon('whatsapp')}<span data-copy="contact.whatsapp-cta">WhatsApp us</span></button>
        <p class="tiny" id="wa-note" style="margin-top:0.75rem">
          Add your full WhatsApp number in edit mode to switch this on.</p>`;
 
@@ -1015,31 +1121,31 @@ async function renderContact() {
       <div class="shell">
         <div class="glow" style="--glow-w:36rem;--glow-h:26rem;--glow-a:0.26;left:-8rem;top:-4rem"></div>
         ${eyebrow('Contact', 'mail')}
-        <h1 class="display display--lg" data-reveal style="max-width:18ch">Let's talk about what you're building.</h1>
+        <h1 class="display display--lg" data-reveal data-copy="contact.title" style="max-width:18ch">Let's talk about what you're building.</h1>
       </div>
     </section>
 
     <section class="section">
       <div class="shell contact-grid">
         <div class="stack-2" data-reveal>
-          <p class="lede">WhatsApp us and we'll get back to you before you take a bite out of your next meal.</p>
+          <p class="lede" data-copy="contact.whatsapp-lede">WhatsApp us and we'll get back to you before you take a bite out of your next meal.</p>
           <div>${whatsapp}</div>
         </div>
 
-        <div class="or-divider" aria-hidden="true" data-reveal><span>Or</span></div>
+        <div class="or-divider" aria-hidden="true" data-reveal><span data-copy="contact.or">Or</span></div>
 
         <div class="stack-2" data-reveal style="--i:1">
           <form class="editor-form" id="contact-form" novalidate>
             <div class="field">
-              <label for="cf-name">Name</label>
+              <label for="cf-name" data-copy="contact.label.name">Name</label>
               <input id="cf-name" name="name" type="text" autocomplete="name" required maxlength="120">
             </div>
             <div class="field">
-              <label for="cf-email">Email</label>
+              <label for="cf-email" data-copy="contact.label.email">Email</label>
               <input id="cf-email" name="email" type="email" autocomplete="email" required maxlength="200">
             </div>
             <div class="field">
-              <label for="cf-message">Message</label>
+              <label for="cf-message" data-copy="contact.label.message">Message</label>
               <textarea id="cf-message" name="message" required maxlength="4000"></textarea>
             </div>
 
@@ -1050,13 +1156,13 @@ async function renderContact() {
             </div>
 
             <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
-              <button class="btn btn--gold" type="submit">Send message ${icon('arrowRight')}</button>
+              <button class="btn btn--gold" type="submit"><span data-copy="contact.send">Send message</span> ${icon('arrowRight')}</button>
               <p class="form-status" role="status" aria-live="polite"></p>
             </div>
           </form>
 
           <p class="tiny">
-            Prefer email?
+            <span data-copy="contact.prefer-email">Prefer email?</span>
             <a class="link-arrow" href="mailto:${esc(email || 'marketing@advatar.co.uk')}">
               ${icon('mail')}<span>${esc(email || 'marketing@advatar.co.uk')}</span></a>
           </p>
@@ -1123,9 +1229,9 @@ async function renderLookInside() {
       <div class="shell">
         <div class="glow" style="--glow-w:34rem;--glow-h:26rem;--glow-a:0.24;right:-8rem;top:-4rem"></div>
         ${eyebrow('Look inside', 'eye')}
-        <h1 class="display display--lg" data-reveal style="max-width:20ch">What it's actually like to work with us.</h1>
-        <p class="lede" data-reveal style="--i:1;margin-top:1.5rem">Start to finish.
-          <span class="dim">No mystery, no black box — here's every step.</span></p>
+        <h1 class="display display--lg" data-reveal data-copy="look.title" style="max-width:20ch">What it's actually like to work with us.</h1>
+        <p class="lede" data-reveal style="--i:1;margin-top:1.5rem"><span data-copy="look.lede">Start to finish.</span>
+          <span class="dim" data-copy="look.lede-dim">No mystery, no black box — here's every step.</span></p>
       </div>
     </section>
 
@@ -1134,18 +1240,25 @@ async function renderLookInside() {
         <ol class="timeline-rail" aria-hidden="true" style="--progress:0">
           ${PROCESS_STEPS.map((step, index) => `
             <li data-rail="${index}" data-active="${index === 0}" data-passed="${index === 0}">
-              <span class="dot"></span><span class="rail-label">${esc(step.label)}</span>
+              <span class="dot"></span><span class="rail-label" data-copy="look.step.${index + 1}.label">${esc(step.label)}</span>
             </li>`).join('')}
         </ol>
 
-        <ol class="timeline-steps" style="list-style:none;margin:0;padding:0">
-          ${PROCESS_STEPS.map((step, index) => `
-            <li class="timeline-step" data-step="${index}" data-visible="false">
-              <span class="step-num">${String(index + 1).padStart(2, '0')}</span>
-              <h3>${esc(step.title)}</h3>
-              <p>${esc(step.copy)}</p>
-            </li>`).join('')}
-        </ol>
+        <!-- Below 900px the side rail is hidden, so the steps carry their own
+             track, fill and markers instead. -->
+        <div class="timeline-track" style="--fill:0px">
+          <span class="timeline-fill" aria-hidden="true"></span>
+          <ol class="timeline-steps" style="list-style:none;margin:0;padding:0">
+            ${PROCESS_STEPS.map((step, index) => `
+              <li class="timeline-step" data-step="${index}" data-visible="false"
+                  data-active="${index === 0}" data-passed="${index === 0}">
+                <span class="step-dot" aria-hidden="true"></span>
+                <span class="step-num">${String(index + 1).padStart(2, '0')}</span>
+                <h3 data-copy="look.step.${index + 1}.title">${esc(step.title)}</h3>
+                <p data-copy="look.step.${index + 1}.copy">${esc(step.copy)}</p>
+              </li>`).join('')}
+          </ol>
+        </div>
       </div>
     </section>
   </main>`;
@@ -1155,19 +1268,44 @@ function mountLookInside() {
   const steps = $$('.timeline-step');
   const rail = $('.timeline-rail');
   const rails = $$('.timeline-rail li');
+  const track = $('.timeline-track');
   if (!steps.length) return;
 
-  /** Light every marker up to `index`, and fill the bar to match (R7). */
+  let activeIndex = 0;
+
+  /*
+    The inline (mobile) track fills to the centre of the active step's marker.
+    Measured with offsetTop, which ignores the reveal's translateY, so the fill
+    lands on the dot even while the step is still animating in.
+  */
+  function updateFill() {
+    const step = steps[activeIndex];
+    const dot = step?.querySelector('.step-dot');
+    if (!track || !dot) return;
+    track.style.setProperty('--fill', `${step.offsetTop + dot.offsetTop + dot.offsetHeight / 2}px`);
+  }
+
+  /** Light every marker up to `index` — side rail and inline track — and fill both. */
   function setActive(index) {
+    activeIndex = index;
     rails.forEach((item) => {
       const position = Number(item.dataset.rail);
       item.dataset.active = String(position === index);
       item.dataset.passed = String(position <= index);
     });
-    // Fill proportionally to the active marker's position along the rail.
+    steps.forEach((item) => {
+      const position = Number(item.dataset.step);
+      item.dataset.active = String(position === index);
+      item.dataset.passed = String(position <= index);
+    });
+    // Fill proportionally to the active marker's position along the side rail.
     const progress = rails.length > 1 ? index / (rails.length - 1) : 1;
     rail?.style.setProperty('--progress', String(progress));
+    updateFill();
   }
+
+  window.addEventListener('resize', updateFill);
+  registerCleanup(() => window.removeEventListener('resize', updateFill));
 
   /* With reduced motion — or no observer — show everything up front. */
   if (prefersReducedMotion() || !('IntersectionObserver' in window)) {
@@ -1178,16 +1316,40 @@ function mountLookInside() {
 
   setActive(0);
 
-  const observer = new IntersectionObserver((entries) => {
+  // Reveal: a step brightens as it comes up the screen.
+  const revealer = new IntersectionObserver((entries) => {
     for (const entry of entries) {
-      if (!entry.isIntersecting) continue;
-      entry.target.dataset.visible = 'true';
-      setActive(Number(entry.target.dataset.step));
+      if (entry.isIntersecting) entry.target.dataset.visible = 'true';
     }
   }, { rootMargin: '-25% 0px -35% 0px', threshold: 0.01 });
 
-  steps.forEach((step) => observer.observe(step));
-  registerCleanup(() => observer.disconnect());
+  /*
+    Active step: a thin band at the reading line, so exactly one step is lit at a
+    time — the one being read — however tall the screen. (A wide band lit the
+    next step early on phones, where two short steps fit inside it at once.)
+  */
+  const spy = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) setActive(Number(entry.target.dataset.step));
+    }
+  }, { rootMargin: '-45% 0px -50% 0px', threshold: 0 });
+
+  steps.forEach((step) => { revealer.observe(step); spy.observe(step); });
+
+  // Fully scrolled, the last step can still sit below the reading line: finish the rail.
+  const onScroll = () => {
+    if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 4) {
+      steps.at(-1).dataset.visible = 'true';
+      setActive(steps.length - 1);
+    }
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
+
+  registerCleanup(() => {
+    revealer.disconnect();
+    spy.disconnect();
+    window.removeEventListener('scroll', onScroll);
+  });
 }
 
 /* -------------------------------------------------------------- Hiring --- */
@@ -1212,7 +1374,7 @@ async function renderHiring() {
 
   const select = (id, label, options) => `
     <div class="field field--select">
-      <label for="${id}">${esc(label)}</label>
+      <label for="${id}" data-copy="hiring.filter.${copyKey(label)}">${esc(label)}</label>
       <select id="${id}" data-filter="${id}">
         <option value="">All</option>
         ${options.map((option) => `<option value="${esc(option)}">${esc(option)}</option>`).join('')}
@@ -1226,7 +1388,7 @@ async function renderHiring() {
       <div class="shell">
         <div class="glow" style="--glow-w:38rem;--glow-h:28rem;--glow-a:0.28;left:-8rem;top:-4rem"></div>
         ${eyebrow("We're hiring", 'briefcase')}
-        <h1 class="display display--lg" data-reveal style="max-width:18ch">Build something you're proud of.</h1>
+        <h1 class="display display--lg" data-reveal data-copy="hiring.title" style="max-width:18ch">Build something you're proud of.</h1>
       </div>
     </section>
 
@@ -1252,22 +1414,22 @@ async function renderHiring() {
     <section class="section backdrop-warm">
       <div class="shell">
         <p class="lede" data-reveal style="max-width:60ch;font-size:clamp(1rem,1.5vw,1.25rem)">
-          At Advatar, growth isn't just something we chase for clients — we build it into how we work together.
-          <span class="dim">This is a place to stretch, take ownership, and do work you're proud to put your name on.</span>
+          <span data-copy="hiring.intro">At Advatar, growth isn't just something we chase for clients — we build it into how we work together.</span>
+          <span class="dim" data-copy="hiring.intro-dim">This is a place to stretch, take ownership, and do work you're proud to put your name on.</span>
         </p>
 
         <div data-reveal style="margin-top:clamp(2.5rem,6vw,4rem)">
           ${eyebrow('Our values in action', 'plus')}
-          <p class="tiny" style="margin:-1.5rem 0 0">The principles that guide how we work and collaborate.</p>
+          <p class="tiny" style="margin:-1.5rem 0 0" data-copy="hiring.values-sub">The principles that guide how we work and collaborate.</p>
           <ol class="values-list">
             ${VALUES.map((value, index) => `
-              <li data-reveal style="--i:${index}"><span class="value-num">${String(index + 1).padStart(2, '0')}</span>${esc(value)}</li>`).join('')}
+              <li data-reveal style="--i:${index}"><span class="value-num">${String(index + 1).padStart(2, '0')}</span><span data-copy="hiring.value.${index + 1}">${esc(value)}</span></li>`).join('')}
           </ol>
         </div>
 
         <div class="stack" data-reveal style="margin-top:2.5rem">
-          <p class="lede">If you want to build something you're proud of — and help others do the same — we'd like to meet you.</p>
-          <div><a class="btn btn--gold" href="#vacancies">Join us ${icon('arrowRight')}</a></div>
+          <p class="lede" data-copy="hiring.cta">If you want to build something you're proud of — and help others do the same — we'd like to meet you.</p>
+          <div><a class="btn btn--gold" href="#vacancies"><span data-copy="hiring.join">Join us</span> ${icon('arrowRight')}</a></div>
         </div>
       </div>
     </section>
@@ -1275,15 +1437,15 @@ async function renderHiring() {
     <section class="section" id="vacancies">
       <div class="shell">
         ${eyebrow('Open roles', 'briefcase')}
-        <h2 class="display display--lg" data-reveal style="margin-bottom:2rem">Vacancies.</h2>
+        <h2 class="display display--lg" data-reveal data-copy="hiring.vacancies" style="margin-bottom:2rem">Vacancies.</h2>
 
         <div class="job-filters" data-reveal>
           <div class="field">
-            <label for="job-q">Keyword</label>
+            <label for="job-q" data-copy="hiring.filter.keyword">Keyword</label>
             <input id="job-q" type="search" data-filter="job-q" placeholder="Role, skill, keyword">
           </div>
           <div class="field">
-            <label for="job-loc">Location</label>
+            <label for="job-loc" data-copy="hiring.filter.location">Location</label>
             <input id="job-loc" type="text" data-filter="job-loc" placeholder="City or region">
           </div>
           ${select('job-dept', 'Department', departments)}
@@ -1418,6 +1580,7 @@ const app = $('#app');
 async function renderRoute(path, { restoreScroll = false } = {}) {
   const route = ROUTES[path] ?? ROUTES['/'];
 
+  if (activeCopyEdit) finishCopyEdit({ save: false });
   cleanups.forEach((fn) => fn());
   cleanups = [];
   closeModal();
@@ -1439,6 +1602,7 @@ async function renderRoute(path, { restoreScroll = false } = {}) {
   }
 
   app.innerHTML = navFragment(path) + pageHtml + footerFragment(state.settings);
+  applyCopy(app);
   app.removeAttribute('aria-busy');
   document.title = route.title;
 
@@ -1489,6 +1653,60 @@ document.addEventListener('click', (event) => {
 
 window.addEventListener('popstate', () => renderRoute(window.location.pathname, { restoreScroll: true }));
 
+/* ------------------------------------------------------ Video playback --- */
+
+/*
+  Delegated once for the whole app, so it covers tiles on pages, in modals and in
+  carousel loop clones alike. (Copy-edit mode's capture handler runs first and
+  swallows the click while a label is being edited.)
+*/
+document.addEventListener('click', (event) => {
+  const tile = event.target.closest('[data-play]');
+  if (!tile) return;
+  event.preventDefault();
+  openVideoLightbox({
+    id: tile.dataset.play,
+    title: tile.dataset.title,
+    aspect: Number(tile.dataset.aspect) || 9 / 16,
+  });
+});
+
+// A poster has the video's own shape, so record it for the lightbox. A poster
+// that fails to load (file not shared publicly) leaves a plain play tile.
+document.addEventListener('load', (event) => {
+  const img = event.target;
+  if (!(img instanceof HTMLImageElement) || !img.classList.contains('media-thumb')) return;
+  if (img.naturalWidth && img.naturalHeight) {
+    img.closest('[data-play]')?.setAttribute('data-aspect', String(img.naturalWidth / img.naturalHeight));
+  }
+}, true);
+
+document.addEventListener('error', (event) => {
+  const img = event.target;
+  if (img instanceof HTMLImageElement && img.classList.contains('media-thumb')) {
+    img.closest('[data-play]')?.classList.add('media--thumb-failed');
+  }
+}, true);
+
+/**
+ * Plays a Drive video in a lightbox sized to the video's own proportions, so
+ * Drive's player never letterboxes it inside a frame of the wrong shape — the
+ * cause of the old "blocked out" tiles.
+ */
+function openVideoLightbox({ id, title, aspect }) {
+  const ratio = Math.min(Math.max(aspect || 9 / 16, 0.45), 2.2);   // clamp odd values
+  openModal({
+    title: title || 'Video',
+    className: 'modal--video',
+    body: `
+      <div class="video-frame" style="--ratio:${ratio.toFixed(4)}">
+        <iframe src="${driveEmbed(id)}" title="${esc(title || 'Video')}"
+                allow="autoplay; encrypted-media; fullscreen" allowfullscreen
+                referrerpolicy="no-referrer"></iframe>
+      </div>`,
+  });
+}
+
 /* --------------------------------------------------- Chrome behaviours --- */
 
 function mountChrome() {
@@ -1522,21 +1740,30 @@ function mountChrome() {
       button.setAttribute('aria-expanded', String(!open));
 
       if (panel.dataset.animate === 'true') {
-        panel.hidden = false;
-        panel.classList.add('disclosure-panel--animated');
-        // Next frame, so the transition has a start value to animate from.
-        requestAnimationFrame(() => { panel.dataset.open = String(!open); });
+        if (open) {
+          panel.dataset.open = 'false';
+          // Once collapsed, hide it properly — otherwise its padding and border
+          // stay on screen as a stray gap under the button.
+          setTimeout(() => { if (panel.dataset.open === 'false') panel.hidden = true; }, 340);
+        } else {
+          panel.hidden = false;
+          panel.classList.add('disclosure-panel--animated');
+          panel.getBoundingClientRect();     // commit the collapsed state first,
+          panel.dataset.open = 'true';       // so the unravel actually animates
+        }
       } else {
         panel.hidden = open;
       }
 
-      /*
-        A [data-reveal] inside a hidden panel can never intersect, so its reveal
-        would never fire and it would open as blank space. Anything revealed by
-        opening a panel is, by definition, already "in view" — mark it shown.
-      */
       if (!open) {
+        /*
+          A [data-reveal] inside a hidden panel can never intersect, so its reveal
+          would never fire and it would open as blank space. Anything revealed by
+          opening a panel is, by definition, already "in view" — mark it shown.
+        */
         $$('[data-reveal]', panel).forEach((node) => { node.dataset.shown = 'true'; });
+        // Carousels inside a closed panel had no width to measure; mount them now.
+        requestAnimationFrame(() => $$('[data-carousel]', panel).forEach((node) => mountCarousel(node)));
       }
     });
   });
@@ -1653,22 +1880,37 @@ function mountHeroParallax() {
 /* ------------------------------------------------------------ Carousel --- */
 
 /**
- * Single-row swipeable carousel (R4): native scroll-snap for touch and
- * trackpad, pointer-drag for mouse, and a right-edge fade + nudge button that
- * disappear once the end is reached.
+ * Swipeable single-row carousel: pointer-drag for mouse, native momentum for
+ * touch, and — when the track opts in with data-autoscroll — a slow continuous
+ * sideways drift that loops seamlessly.
+ *
+ * A loop needs the items twice. Instead of rendering duplicates up front, the
+ * clones are made here, and only when one pass of the items is wider than the
+ * row can show: a client with one or two videos just sits still. A carousel in a
+ * closed panel has no width to measure, so the panel mounts it when it opens.
  */
 function mountCarousel(root) {
-  if (!root) return;
+  if (!root || root.dataset.mounted === 'true') return;
   const track = $('.carousel-track', root);
   const next = $('.carousel-nav', root);
-  if (!track) return;
+  if (!track || !track.clientWidth) return;          // hidden — mounted on open
+  root.dataset.mounted = 'true';
 
-  /*
-    The track holds the cards twice. `loopWidth` is the width of one pass, so
-    once the drift passes it we subtract that width and the row appears to run
-    forever without a jump.
-  */
-  const looping = track.dataset.autoscroll === 'true';
+  const wantsLoop = track.dataset.autoscroll === 'true' && !prefersReducedMotion();
+  const looping = wantsLoop && track.scrollWidth > track.clientWidth + 8;
+
+  if (looping) {
+    for (const node of [...track.children]) {
+      const clone = node.cloneNode(true);
+      clone.setAttribute('aria-hidden', 'true');
+      clone.removeAttribute('data-reveal');
+      clone.dataset.clone = 'true';
+      $$('a, button', clone).forEach((el) => el.setAttribute('tabindex', '-1'));
+      track.append(clone);
+    }
+  }
+  root.dataset.looping = String(looping);
+
   const loopWidth = () => track.scrollWidth / 2;
 
   const updateEnd = () => {
@@ -1677,14 +1919,14 @@ function mountCarousel(root) {
     root.dataset.atEnd = String(track.scrollLeft + track.clientWidth >= track.scrollWidth - 8);
   };
 
-  const step = () => Math.max(track.clientWidth * 0.8, 260);
+  const step = () => Math.max(track.clientWidth * 0.8, 220);
   next?.addEventListener('click', () => track.scrollBy({ left: step(), behavior: 'smooth' }));
 
   track.addEventListener('scroll', updateEnd, { passive: true });
   updateEnd();
 
   /* ---- Slow continuous drift -------------------------------------------- */
-  if (looping && !prefersReducedMotion()) {
+  if (looping) {
     const SPEED = 14;                 // px per second — a slow walk, not a slide
     let paused = false;
     let last = performance.now();
@@ -1693,6 +1935,7 @@ function mountCarousel(root) {
     let carry = 0;
 
     const tick = (now) => {
+      if (!track.isConnected) return;   // its modal closed, or the page changed
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
 
@@ -1763,9 +2006,8 @@ function mountCarousel(root) {
   track.addEventListener('pointerup', endDrag);
   track.addEventListener('pointercancel', endDrag);
 
-  const onResize = () => updateEnd();
-  window.addEventListener('resize', onResize);
-  registerCleanup(() => window.removeEventListener('resize', onResize));
+  window.addEventListener('resize', updateEnd);
+  registerCleanup(() => window.removeEventListener('resize', updateEnd));
 }
 
 /**
@@ -1794,7 +2036,7 @@ function openNavMenu() {
         ${MENU_ITEMS.map((item) => `
           <li>
             <a href="${item.href}"${item.href === path ? ' aria-current="page"' : ''}>
-              ${item.glyph ? icon(item.glyph) : ''}<span>${esc(item.label)}</span>
+              ${item.glyph ? icon(item.glyph) : ''}<span data-copy="nav.${copyKey(item.label)}">${esc(item.label)}</span>
             </a>
           </li>`).join('')}
       </ul>
@@ -1809,6 +2051,8 @@ function openNavMenu() {
       -->
       <div class="nav-login-slot"></div>
     </div>`;
+
+  applyCopy(menu);
 
   const focusables = () =>
     $$('a[href], button:not([disabled])', menu).filter((node) => node.offsetParent !== null);
@@ -1877,6 +2121,11 @@ function syncThemeToggles() {
 function setAuthed(authed) {
   state.authed = authed;
   document.body.dataset.edit = String(authed);
+  if (!authed) {
+    state.copyEditing = false;
+    document.body.dataset.copyEditing = 'false';
+    finishCopyEdit({ save: false });
+  }
   renderEditBar();
 }
 
@@ -1888,7 +2137,13 @@ function renderEditBar() {
   bar.className = 'edit-bar';
   bar.innerHTML = `
     <span>Edit mode</span>
+    <button type="button" class="btn btn--sm edit-text-toggle" data-copy-toggle
+            aria-pressed="${state.copyEditing}">${icon('pencil')}<span>Edit text</span></button>
     <button type="button" class="icon-btn" data-logout aria-label="Log out of edit mode">${icon('logout')}</button>`;
+  bar.querySelector('[data-copy-toggle]').addEventListener('click', (event) => {
+    setCopyEditing(!state.copyEditing);
+    event.currentTarget.setAttribute('aria-pressed', String(state.copyEditing));
+  });
   bar.querySelector('[data-logout]').addEventListener('click', async () => {
     await api.del('/api/auth');
     setAuthed(false);
@@ -1935,6 +2190,247 @@ function openPasswordPrompt() {
           setAuthed(true);
           toast('Edit mode unlocked.');
           renderRoute(window.location.pathname, { restoreScroll: true });
+        } catch (error) {
+          status.dataset.state = 'error';
+          status.textContent = error.message;
+        }
+      });
+    },
+  });
+}
+
+/* ------------------------------------------------------- Text editing --- */
+
+/*
+  "Edit text" mode. Every [data-copy] element becomes clickable: the click edits
+  it in place instead of doing what it normally does (following a link, opening
+  a panel). Enter saves, Shift+Enter adds a line break, Escape cancels, and Reset
+  removes the override so the original wording returns.
+*/
+let activeCopyEdit = null;
+
+function setCopyEditing(on) {
+  state.copyEditing = Boolean(on && state.authed);
+  document.body.dataset.copyEditing = String(state.copyEditing);
+  if (!state.copyEditing) finishCopyEdit({ save: false });
+  toast(state.copyEditing
+    ? 'Text editing on — click any heading, line or label to change it.'
+    : 'Text editing off.');
+}
+
+// Capture phase, so it runs before every other click handler on the page.
+document.addEventListener('click', (event) => {
+  if (!state.copyEditing) return;
+  if (event.target.closest('.copy-toolbar, .edit-bar, .modal-backdrop, .toast-region')) return;
+  const node = event.target.closest('[data-copy]');
+  if (!node) return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (activeCopyEdit?.node !== node) startCopyEdit(node);
+}, true);
+
+/**
+ * The text as a person sees it: source indentation collapsed the way HTML
+ * renders it, <br> kept as a real line break. (innerText is unusable here — it
+ * applies text-transform, so an uppercase nav label would be saved in capitals.)
+ */
+function readEditableText(node) {
+  const clone = node.cloneNode(true);
+  const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
+  for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+    text.nodeValue = text.nodeValue.replace(/\s+/g, ' ');
+  }
+  clone.querySelectorAll('br').forEach((br) => br.replaceWith('\n'));
+  clone.querySelectorAll('div, p').forEach((block) => block.prepend('\n'));
+  return clone.textContent
+    .split('\n').map((line) => line.trim()).join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function positionCopyToolbar(toolbar, node) {
+  const rect = node.getBoundingClientRect();
+  const below = rect.bottom + 10;
+  const top = below + toolbar.offsetHeight > window.innerHeight - 8
+    ? Math.max(8, rect.top - toolbar.offsetHeight - 10)
+    : below;
+  const left = Math.min(Math.max(8, rect.left), window.innerWidth - toolbar.offsetWidth - 8);
+  toolbar.style.top = `${Math.round(top)}px`;
+  toolbar.style.left = `${Math.round(left)}px`;
+}
+
+function startCopyEdit(node) {
+  finishCopyEdit({ save: false });
+  const key = node.dataset.copy;
+  const original = node.innerHTML;
+
+  node.classList.add('copy-editing');
+  // plaintext-only keeps pasted formatting out; fall back where it's unsupported.
+  node.setAttribute('contenteditable', 'plaintext-only');
+  if (node.contentEditable !== 'plaintext-only') node.setAttribute('contenteditable', 'true');
+  node.setAttribute('spellcheck', 'true');
+  node.focus();
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'copy-toolbar';
+  toolbar.innerHTML = `
+    <span class="copy-toolbar-key" title="${esc(key)}">${esc(key)}</span>
+    <button type="button" class="btn btn--sm" data-copy-cancel>Cancel</button>
+    <button type="button" class="btn btn--sm" data-copy-reset ${state.copy?.[key] ? '' : 'disabled'}
+            title="Go back to the original wording">Reset</button>
+    <button type="button" class="btn btn--sm btn--gold" data-copy-save>Save</button>`;
+  document.body.append(toolbar);
+  positionCopyToolbar(toolbar, node);
+
+  const onKey = (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      finishCopyEdit({ save: false });
+    } else if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      finishCopyEdit({ save: true });
+    }
+  };
+  const onPaste = (event) => {
+    event.preventDefault();
+    document.execCommand('insertText', false, event.clipboardData?.getData('text/plain') ?? '');
+  };
+  const reposition = () => positionCopyToolbar(toolbar, node);
+
+  node.addEventListener('keydown', onKey);
+  node.addEventListener('paste', onPaste);
+  window.addEventListener('scroll', reposition, { passive: true });
+  window.addEventListener('resize', reposition);
+  toolbar.querySelector('[data-copy-cancel]').addEventListener('click', () => finishCopyEdit({ save: false }));
+  toolbar.querySelector('[data-copy-save]').addEventListener('click', () => finishCopyEdit({ save: true }));
+  toolbar.querySelector('[data-copy-reset]').addEventListener('click', () => resetCopy(key));
+
+  activeCopyEdit = {
+    node,
+    key,
+    original,
+    teardown() {
+      node.removeEventListener('keydown', onKey);
+      node.removeEventListener('paste', onPaste);
+      window.removeEventListener('scroll', reposition);
+      window.removeEventListener('resize', reposition);
+      node.removeAttribute('contenteditable');
+      node.removeAttribute('spellcheck');
+      node.classList.remove('copy-editing');
+      toolbar.remove();
+    },
+  };
+}
+
+async function finishCopyEdit({ save }) {
+  const edit = activeCopyEdit;
+  if (!edit) return;
+  activeCopyEdit = null;
+  const text = readEditableText(edit.node);
+  edit.teardown();
+
+  if (!save) {
+    edit.node.innerHTML = edit.original;
+    return;
+  }
+  if (!text) {
+    edit.node.innerHTML = edit.original;
+    toast('Text can’t be empty — use Reset to go back to the original.', 'error');
+    return;
+  }
+  try {
+    const { copy } = await api.put('/api/copy', { copy: { [edit.key]: text } });
+    state.copy = copy;
+    applyCopy();                 // every instance of the key, e.g. each "See more"
+    toast('Text saved.');
+  } catch (error) {
+    edit.node.innerHTML = edit.original;
+    toast(error.message, 'error');
+  }
+}
+
+async function resetCopy(key) {
+  finishCopyEdit({ save: false });
+  try {
+    const { copy } = await api.put('/api/copy', { copy: { [key]: null } });
+    state.copy = copy;
+    toast('Back to the original text.');
+    // The original wording lives in the page markup, so re-render to restore it.
+    await renderRoute(window.location.pathname, { restoreScroll: true });
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+/* ------------------------------------------------------- Client sync --- */
+
+/**
+ * Shows what data/seed.json has that the live client list doesn't — new clients
+ * and category moves — and applies only what's ticked. Needed because once the
+ * list has been edited in production, seed changes never appear on their own.
+ */
+async function openClientSync() {
+  let plan;
+  try {
+    plan = await api.get('/api/sync-clients');
+  } catch (error) {
+    toast(error.message, 'error');
+    return;
+  }
+  const { add, move } = plan;
+  if (!add.length && !move.length) {
+    toast('Clients are already up to date with the spreadsheet list.');
+    return;
+  }
+
+  const row = (kind, item, html) => `
+    <li>
+      <label style="display:flex;align-items:center;gap:0.75rem;cursor:pointer">
+        <input type="checkbox" name="${kind}" value="${esc(item.id)}" checked
+               style="width:20px;height:20px;min-height:20px">
+        <span>${html}</span>
+      </label>
+    </li>`;
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+  openModal({
+    title: 'Sync clients',
+    subtitle: 'From the client spreadsheet, not yet on the live site. Nothing is deleted, and videos, taglines and flags are never touched.',
+    body: `
+      <form class="editor-form" id="sync-form">
+        ${add.length ? `
+          <p class="micro">Add ${plural(add.length, 'new client')}</p>
+          <ul class="admin-list">${add.map((item) =>
+            row('add', item, `<strong>${esc(item.name)}</strong> <span class="tiny">→ ${esc(item.category)}</span>`)).join('')}</ul>` : ''}
+        ${move.length ? `
+          <p class="micro">Move ${plural(move.length, 'client')} to a new category</p>
+          <ul class="admin-list">${move.map((item) =>
+            row('move', item, `<strong>${esc(item.name)}</strong> <span class="tiny">${esc(item.from)} → ${esc(item.to)}</span>`)).join('')}</ul>` : ''}
+        <p class="form-status" role="status" aria-live="polite"></p>
+        <div class="editor-actions">
+          <button type="button" class="btn" data-close>Cancel</button>
+          <button type="submit" class="btn btn--gold">Apply selected</button>
+        </div>
+      </form>`,
+    onMount(host) {
+      const form = $('#sync-form', host);
+      const status = $('.form-status', form);
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const picked = (name) => $$(`input[name="${name}"]:checked`, form).map((input) => input.value);
+        status.dataset.state = '';
+        status.textContent = 'Applying…';
+        try {
+          const result = await api.post('/api/sync-clients', { add: picked('add'), move: picked('move') });
+          state.clients = result.items;
+          closeModal();
+          toast(`Synced — ${result.added} added, ${result.moved} moved.`);
+          await renderRoute(window.location.pathname, { restoreScroll: true });
         } catch (error) {
           status.dataset.state = 'error';
           status.textContent = error.message;
@@ -2192,7 +2688,7 @@ function openSettingsEditor({ title, subtitle, fields }) {
 
 const CLIENT_FIELDS = [
   { name: 'name', label: 'Client name', type: 'text' },
-  { name: 'category', label: 'Industry', type: 'text', hint: 'Groups the client on Our Work.' },
+  { name: 'category', label: 'Industry', type: 'text', hint: 'Groups the client on Our Work — e.g. "Personal Brands & Creators".' },
   { name: 'tagline', label: 'Tagline', type: 'text' },
   { name: 'websiteUrl', label: 'Website URL', type: 'text' },
   { name: 'logoUrl', label: 'Logo URL', type: 'text' },
@@ -2341,6 +2837,7 @@ function mountEditHandlers() {
 
     'recent-wins': openRecentWinsEditor,
     submissions: openSubmissionsList,
+    'sync-clients': openClientSync,
   };
 
   $$('[data-edit]').forEach((button) => {
@@ -2447,6 +2944,13 @@ async function boot() {
     state.settings = { contact: { email: 'marketing@advatar.co.uk' } };
   }
 
+  // Copy overrides are cosmetic: if they fail to load, the default text stands.
+  try {
+    await load('copy');
+  } catch {
+    state.copy = {};
+  }
+
   try {
     const { authed, configured } = await api.get('/api/auth');
     state.authConfigured = configured;
@@ -2456,6 +2960,7 @@ async function boot() {
   }
 
   await renderRoute(window.location.pathname);
+  playThemeIntro();
 }
 
 boot();

@@ -22,17 +22,30 @@
 
 <!--
   Stamp the theme before first paint so there is no flash of the wrong one.
-  Light is the default; a stored choice wins. Kept inline and tiny on purpose —
-  app.js loads as a module and would run far too late for this.
+  Dark is the default; a stored choice always wins. Kept inline and tiny on
+  purpose — app.js loads as a module and would run far too late for this.
+
+  First visit only (no chosen theme, intro not yet seen): open in LIGHT and mark
+  the intro pending. app.js then sweeps the page to dark with the toggle
+  spotlighted, so visitors learn the mode switch exists. Add ?intro=1 to any URL
+  to replay it. Skipped entirely for prefers-reduced-motion.
 -->
 <script>
   (function () {
-    var theme = 'light';
+    var root = document.documentElement;
+    var stored = null, seen = false, reduced = false;
     try {
-      var stored = localStorage.getItem('advatar-theme');
-      if (stored === 'light' || stored === 'dark') theme = stored;
-    } catch (e) { /* private mode: fall through to the default */ }
-    document.documentElement.setAttribute('data-theme', theme);
+      stored = localStorage.getItem('advatar-theme');
+      seen = localStorage.getItem('advatar-intro-seen') === '1';
+    } catch (e) { /* private mode: fall through to the defaults */ }
+    try { reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+    var forced = /[?&]intro=1(&|$)/.test(location.search);
+    var theme = stored === 'light' || stored === 'dark' ? stored : 'dark';
+    if (!reduced && (forced || (!stored && !seen))) {
+      theme = 'light';
+      root.setAttribute('data-theme-intro', 'pending');
+    }
+    root.setAttribute('data-theme', theme);
   })();
 </script>
 </head>

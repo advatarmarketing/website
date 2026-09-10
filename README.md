@@ -6,13 +6,14 @@ store behind it. Every piece of content is editable in the browser through **Web
 edit** mode — nothing on the site is hardcoded.
 
 ```
-index.html      SPA shell: #app mount, grain filter, hairline grid, font links
+index.html      SPA shell: #app mount, theme bootstrap, grain + ambient layers, font links
 styles.css      design tokens + every component
 app.js          router, page renderers, modal/toast/glass components, edit mode
 api/            one file per endpoint (Vercel serverless functions)
 lib/kv.js       the data layer — the ONE file to change if you swap database
 lib/            auth, http helpers, collection CRUD factory, seed loader
 data/seed.json  initial content; also the fallback for any key never written
+assets/         film-grain tile, keyed hero video (desktop + mobile) and its poster
 vercel.json     SPA rewrites, security headers
 ```
 
@@ -29,6 +30,7 @@ Create a `.env` file first (it is gitignored):
 ADMIN_PASSWORD=pick-something-long
 SESSION_SECRET=<64 random hex chars>
 ALLOW_SEED=1
+ADVATAR_LOCAL_STORE=1
 ```
 
 Generate a session secret with:
@@ -40,6 +42,12 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 Without `KV_REST_API_URL` / `KV_REST_API_TOKEN`, the data layer falls back to a local
 JSON file at `.data/store.json`. That is fine for local work but **does not persist on
 Vercel** — serverless filesystems are ephemeral and per-instance.
+
+**Local dev never touches production.** The Upstash variables are enabled for the
+Development environment, and newer Vercel CLIs pull those into `vercel dev` automatically —
+which would make every local test edit land on the live site. `lib/kv.js` therefore uses the
+local file store whenever `VERCEL_ENV` is `development` or `ADVATAR_LOCAL_STORE=1`. Deployed
+functions (production and preview) are unaffected.
 
 ## Database
 
@@ -92,6 +100,26 @@ Once unlocked, small `edit` chips appear beside every editable region:
 For visitors without a session the edit affordances are **not rendered at all** — they are
 absent from the DOM, not merely hidden — and every write is re-authorised server-side.
 
+### Editing any text
+
+The edit bar has an **Edit text** switch. With it on, every heading, paragraph, button
+label, eyebrow and nav item is outlined; click one to edit it in place. **Enter** saves,
+**Shift+Enter** adds a line break, **Escape** cancels, and **Reset** returns to the original
+wording. While it's on, clicks edit rather than navigate — switch it off to browse normally.
+
+Overrides are stored as a single `copy` object (`/api/copy`), keyed by each element's
+`data-copy` attribute. The original wording lives in the page markup, so an empty store is
+simply the site as designed. Client names, videos and job details are data rather than copy —
+edit those in their managers, as before.
+
+### Syncing clients
+
+Once the client list has been edited on the live site, the stored list is what shows —
+changes to `data/seed.json` never appear there on their own. **Sync clients** (beside Manage
+clients on Our Work) lists what the seed has that the live list doesn't — new clients, and
+category changes — and applies only what you tick. It never deletes anything, and never
+touches videos, taglines or flags.
+
 ## Environment variables
 
 | Variable | Required | Purpose |
@@ -100,6 +128,7 @@ absent from the DOM, not merely hidden — and every write is re-authorised serv
 | `SESSION_SECRET` | yes | Signs the session cookie |
 | `KV_REST_API_URL` / `KV_REST_API_TOKEN` | yes in production | Upstash Redis; set by the integration |
 | `ALLOW_SEED` | no | Set to `1` to enable `POST /api/seed` |
+| `ADVATAR_LOCAL_STORE` | local only | `1` keeps `vercel dev` on the local file store. Never set it on Vercel |
 | `RESEND_API_KEY` + `CONTACT_NOTIFY_TO` | no | Emails you each contact submission |
 | `CONTACT_NOTIFY_FROM` | no | Verified Resend sender address |
 
@@ -109,10 +138,17 @@ failure there never fails the submission.
 ## Themes
 
 Two themes share one set of token names. Dark is the base `:root` declaration;
-`:root[data-theme="light"]` overrides the palette half. **Light is the default** — a tiny
+`:root[data-theme="light"]` overrides the palette half. **Dark is the default** — a tiny
 inline script in `<head>` stamps the attribute from `localStorage` before first paint, so
 there is no flash of the wrong theme. The sun/moon toggle sits in the nav on every page
-and again inside the menu panel.
+and again inside the menu panel; where the View Transitions API exists, switching crossfades
+the whole page.
+
+**First-visit intro.** A browser that has never chosen a theme opens the site in light, then
+sweeps to dark while the toggle is spotlighted with a "Switch light / dark anytime" hint, so
+visitors learn the view can be changed. It plays once per browser, never overrides a stored
+choice, is skipped for `prefers-reduced-motion`, and doesn't record dark as the visitor's
+choice. Add `?intro=1` to any URL to replay it.
 
 Two accent tokens exist on purpose:
 
@@ -130,8 +166,10 @@ palette value, re-check it — the failure mode is silent.
 Tokens live at the top of `styles.css`.
 
 - **Type** — General Sans (Fontshare) for display, Inter for UI. Nothing below 12px.
-- **Grain** — fixed `feTurbulence` overlay. 12% at `mix-blend-mode: overlay` on dark;
-  6% at `soft-light` on light, where stronger grain reads as dirt.
+- **Grain** — a 512px tile cut from a scanned film-grain texture, contrast-boosted so blend
+  modes actually bite, re-exposed every "frame" so it reads as film rather than a static
+  overlay. 30% `overlay` on dark; 7.5% `multiply` on light. It sits **below** all content, so
+  photos and video are never grained.
 - **Texture** — nothing sits on flat colour. A fixed warm gradient mesh (`.ambient`) sits
   behind every page; setting `settings.textureUrl` layers a blurred, dimmed still from real
   work beneath it.
@@ -148,7 +186,11 @@ Tokens live at the top of `styles.css`.
 - **Hero parallax** — the background layers track scroll at 0.28–0.45×, and the hero
   content fades out as the next section rises over it.
 - **Look Inside** — a progress rail fills as you scroll, with a marker per step that lights
-  as its text becomes active.
+  as its step reaches the reading line. On desktop it's a sticky side rail; below 900px the
+  steps carry their own track, fill and markers.
+- **Carousels** — Recent Wins and every client's video list drift slowly sideways and loop
+  seamlessly. The loop clones are only made when a row is wider than the screen, so one or
+  two videos simply sit still. Hover, focus, drag or a hidden tab pauses the drift.
 - **Instant by design** — the Our Work industry/client panels show and hide with no
   animation, as the original brief required. Photography and Websites unravel with a
   transition; they opt in via `data-animate="true"`.
@@ -158,8 +200,9 @@ Tokens live at the top of `styles.css`.
 
 ## Clients
 
-`data/seed.json` carries 45 clients across 8 categories, deduplicated from the spreadsheet
-so nobody appears twice. Where a client also had event-photography coverage, that is
+`data/seed.json` carries 48 clients across 9 categories, deduplicated from both tabs of the
+client spreadsheet so nobody appears twice. **Personal Brands & Creators** always leads the
+category order, and **Car & Transport** always comes last. Where a client also had event-photography coverage, that is
 recorded in their `notes` field rather than duplicating them under a second category.
 
 Two flags drive where a client appears:
@@ -171,6 +214,17 @@ Two flags drive where a client appears:
 The hero needs no assets: the amber light shaft is pure CSS and recomposes on mobile so
 the headline always sits on dark ground. Supplying `heroVideoDesktopUrl` /
 `heroVideoMobileUrl` / `heroPosterUrl` / `heroHandAssetUrl` layers real footage underneath it.
+
+## Videos
+
+Client videos are Google Drive files, shown as a **poster + play button** rather than an
+embedded player. Drive's player carries its own header and controls, and letterboxes any
+video whose shape doesn't match the frame — a square video in a portrait tile came out
+"blocked out". Tiles instead show the whole frame at its true shape over a blurred fill of
+itself, and playback opens in a lightbox sized to the video's own proportions.
+
+For a poster to appear, the Drive file must be shared as **Anyone with the link**. A file
+that isn't still shows as a play tile.
 
 ## Not built
 
