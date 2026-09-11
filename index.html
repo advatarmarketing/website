@@ -21,38 +21,53 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 
 <!--
-  Stamp the theme before first paint so there is no flash of the wrong one.
-  Dark is the default; a stored choice always wins. Kept inline and tiny on
-  purpose — app.js loads as a module and would run far too late for this.
-
-  First visit only (no chosen theme, intro not yet seen): open in LIGHT and mark
-  the intro pending. app.js then sweeps the page to dark with the toggle
-  spotlighted, so visitors learn the mode switch exists. Add ?intro=1 to any URL
-  to replay it. Skipped entirely for prefers-reduced-motion.
+  Runs before first paint, so nothing flashes:
+  - Theme: dark by default; a stored choice always wins.
+  - Loader: a fresh load of the homepage opens on the intro film (skipped for
+    prefers-reduced-motion, or with ?loader=0). The attribute is set here so the
+    film covers the page from the very first frame; app.js then hands its
+    wordmark off to the nav. A timer releases the page if app.js never runs.
 -->
 <script>
   (function () {
     var root = document.documentElement;
-    var stored = null, seen = false, reduced = false;
-    try {
-      stored = localStorage.getItem('advatar-theme');
-      seen = localStorage.getItem('advatar-intro-seen') === '1';
-    } catch (e) { /* private mode: fall through to the defaults */ }
+    var stored = null, reduced = false;
+    try { stored = localStorage.getItem('advatar-theme'); } catch (e) { /* private mode */ }
     try { reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
-    var forced = /[?&]intro=1(&|$)/.test(location.search);
-    var theme = stored === 'light' || stored === 'dark' ? stored : 'dark';
-    if (!reduced && (forced || (!stored && !seen))) {
-      theme = 'light';
-      root.setAttribute('data-theme-intro', 'pending');
+    root.setAttribute('data-theme', stored === 'light' || stored === 'dark' ? stored : 'dark');
+    var home = location.pathname === '/' || location.pathname === '/index.html';
+    if (home && !reduced && !/[?&]loader=0(&|$)/.test(location.search)) {
+      root.setAttribute('data-loading', '');
+      setTimeout(function () { root.removeAttribute('data-loading'); }, 15000);
     }
-    root.setAttribute('data-theme', theme);
   })();
 </script>
+<link rel="preload" as="image" href="/assets/logo-dark.png">
+<link rel="preload" as="image" href="/assets/logo-light.png">
 </head>
 <body>
 
 <!-- Skip link: first thing a keyboard user reaches. -->
 <a class="skip-link" href="#main">Skip to content</a>
+
+<!--
+  The homepage intro film — only shown while <html data-loading> is set. It
+  starts downloading and playing here, during parse, instead of waiting for
+  app.js. Click, tap, Escape, Enter or Space skips it.
+-->
+<div class="loader" aria-hidden="true">
+  <video class="loader-video" src="/assets/loader.mp4" muted playsinline preload="none"></video>
+  <button type="button" class="loader-skip" tabindex="-1">Skip</button>
+</div>
+<script>
+  (function () {
+    if (!document.documentElement.hasAttribute('data-loading')) return;
+    var film = document.querySelector('.loader-video');
+    film.preload = 'auto';
+    var started = film.play();
+    if (started && started.catch) started.catch(function () { /* app.js handles it */ });
+  })();
+</script>
 
 <!--
   Film grain. A fixed, pointer-events-none overlay above backgrounds and video,

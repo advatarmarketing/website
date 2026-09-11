@@ -297,30 +297,26 @@ function applyTheme(theme, { persist = true, duration = 450 } = {}) {
 const toggleTheme = () => applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
 
 /**
- * First-visit intro: the page opens in light, then sweeps to dark while the
- * toggle is spotlighted with a hint, so people learn the view can be switched.
- * index.html decides whether it plays (once per browser, or ?intro=1).
+ * First-visit notice: the theme toggle is spotlighted with a small hint, so
+ * people learn the view can be switched. Once per browser; ?hint=1 replays it.
  */
-async function playThemeIntro() {
-  const root = document.documentElement;
-  if (root.getAttribute('data-theme-intro') !== 'pending') return;
-  root.setAttribute('data-theme-intro', 'playing');
-  try { localStorage.setItem('advatar-intro-seen', '1'); } catch { /* private mode */ }
+async function playThemeNotice() {
+  const forced = /[?&](hint|intro)=1(&|$)/.test(window.location.search);
+  let seen = false;
+  try { seen = localStorage.getItem('advatar-hint-seen') === '1'; } catch { /* private mode */ }
+  if (seen && !forced) return;
+  try { localStorage.setItem('advatar-hint-seen', '1'); } catch { /* private mode */ }
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const toggles = () => $$('[data-theme-toggle]');
-
-  await sleep(450);                     // a beat in light, so the change is noticed
+  await sleep(400);
   toggles().forEach((node) => node.classList.add('theme-toggle--spotlight'));
   const hint = showThemeHint();
-  await sleep(250);
-  await applyTheme('dark', { persist: false, duration: 950 });
-  await sleep(2300);
+  await sleep(3200);
   toggles().forEach((node) => node.classList.remove('theme-toggle--spotlight'));
   hint?.classList.add('theme-hint--out');
   await sleep(300);
   hint?.remove();
-  root.removeAttribute('data-theme-intro');
 }
 
 /** The small "you can switch this" pill that points at the nav toggle. */
@@ -347,28 +343,19 @@ const themeToggleButton = (extraClass = '') => `
 /* ----------------------------------------------------------------- Logo --- */
 
 /*
-  Built-in fallback mark: the "A" with an upward arrow in its counter, over the
-  underscore bar. Used until real logo files are set via settings.logoLightUrl /
-  logoDarkUrl in Web Dev Edit.
+  The Advatar wordmark: light artwork on the dark theme, dark artwork on the
+  light one. Both are cropped tight and cut out of their backgrounds, so they sit
+  on the page rather than in a grey box. settings.logoDarkUrl / logoLightUrl
+  still override them from edit mode.
 */
-const LOGO_FALLBACK = `
-  <svg viewBox="0 0 30 32" aria-hidden="true" focusable="false" fill="none">
-    <path d="M13.2 3h3.6l9.7 21.2h-5.3L15 8.7 8.8 24.2H3.5z" fill="currentColor"/>
-    <path d="M8.9 18.8h12.2v3.1H8.9z" fill="currentColor"/>
-    <path d="M15 15.5V8.6" stroke="currentColor" stroke-width="1.1"/>
-    <path d="M12.9 10.6 15 8.2l2.1 2.4" stroke="currentColor" stroke-width="1.1"
-          stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M3.5 26.9h19.1V31H3.5z" fill="currentColor"/>
-    <path d="M25.1 26.9h1.2l1 2.3 1-2.3h1.2V31h-1v-2.4L27.6 31h-.6l-.9-2.4V31h-1z" fill="currentColor"/>
-  </svg>`;
+const LOGO_DARK = '/assets/logo-dark.png';
+const LOGO_LIGHT = '/assets/logo-light.png';
 
-/** Inner markup for the brand mark — a real logo image, or the fallback. */
 function brandInner() {
   const settings = state.settings ?? {};
-  const url = safeUrl(currentTheme() === 'dark' ? settings.logoDarkUrl : settings.logoLightUrl);
-  return url
-    ? `<img class="brand-logo" src="${url}" alt="Advatar" decoding="async">`
-    : `${LOGO_FALLBACK}<span class="brand-word">Advatar</span>`;
+  const dark = currentTheme() === 'dark';
+  const url = safeUrl(dark ? settings.logoDarkUrl : settings.logoLightUrl) || (dark ? LOGO_DARK : LOGO_LIGHT);
+  return `<img class="brand-logo" src="${url}" alt="Advatar" width="568" height="170" decoding="async">`;
 }
 
 function navFragment(path) {
@@ -3002,6 +2989,109 @@ async function openSubmissionsList() {
   });
 }
 
+/* ============================================================ Loader ====== */
+
+/*
+  The homepage intro film. index.html sets <html data-loading> before first
+  paint and starts the film; this waits for it to end (or a skip), then hands
+  off: a copy of the logo is laid exactly over the film's final wordmark — the
+  two are drawn from the same artwork, so they line up — and flies into the
+  nav's logo while the black lifts away to reveal the page.
+*/
+const FILM_MARK = { x: 367, y: 301, w: 539, frameW: 1280, frameH: 720 }; // wordmark in the last frame
+const LOGO_INSET = { x: 6 / 568, y: 6 / 170, w: 556 / 568 };              // the mark within the logo files
+
+async function playLoader() {
+  const root = document.documentElement;
+  const loader = $('.loader');
+  if (!root.hasAttribute('data-loading') || !loader) return;
+  const film = $('.loader-video', loader);
+
+  await new Promise((resolve) => {
+    let done = false;
+    const onKey = (event) => {
+      if (['Escape', 'Enter', ' '].includes(event.key)) { event.preventDefault(); finish(); }
+    };
+    const timers = [
+      // A slow connection shouldn't hold the site hostage: if the film hasn't
+      // started within 3.5s, or hasn't finished within 9s, go straight in.
+      setTimeout(() => { if (film.currentTime < 0.2) finish(); }, 3500),
+      setTimeout(() => finish(), 9000),
+    ];
+    function finish() {
+      if (done) return;
+      done = true;
+      timers.forEach(clearTimeout);
+      film.removeEventListener('ended', finish);
+      film.removeEventListener('error', finish);
+      loader.removeEventListener('click', finish);
+      document.removeEventListener('keydown', onKey);
+      resolve();
+    }
+    if (film.ended) { finish(); return; }
+    film.addEventListener('ended', finish);
+    film.addEventListener('error', finish);
+    loader.addEventListener('click', finish);
+    document.addEventListener('keydown', onKey);
+    film.play()?.catch(() => finish());
+  });
+
+  try {
+    await handOffLogo(loader, film);
+  } finally {
+    root.removeAttribute('data-loading');
+    loader.remove();
+  }
+}
+
+async function handOffLogo(loader, film) {
+  const target = $('.nav .brand-logo');
+  if (!target) return;
+
+  // Where the film's wordmark sits on screen. The film is object-fit: contain,
+  // so it's scaled uniformly and centred in the viewport.
+  const box = film.getBoundingClientRect();
+  const k = Math.min(box.width / FILM_MARK.frameW, box.height / FILM_MARK.frameH);
+  const originX = box.left + (box.width - FILM_MARK.frameW * k) / 2;
+  const originY = box.top + (box.height - FILM_MARK.frameH * k) / 2;
+  const width = (FILM_MARK.w * k) / LOGO_INSET.w;
+  const height = width * (170 / 568);
+  const left = originX + FILM_MARK.x * k - LOGO_INSET.x * width;
+  const top = originY + FILM_MARK.y * k - LOGO_INSET.y * height;
+
+  // The flyer: the dark-theme artwork, which matches the film; on the light
+  // theme it cross-fades to the dark-on-light artwork on the way.
+  const light = currentTheme() === 'light';
+  const flyer = document.createElement('div');
+  flyer.className = 'loader-flyer';
+  flyer.setAttribute('aria-hidden', 'true');
+  Object.assign(flyer.style, { left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px` });
+  flyer.innerHTML = `<img src="${LOGO_DARK}" alt="">${light ? `<img class="loader-flyer-alt" src="${target.src}" alt="">` : ''}`;
+  document.body.append(flyer);
+  target.style.visibility = 'hidden';
+
+  try {
+    // 1. The logo settles in over the film's own wordmark, and the film goes.
+    await flyer.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: 'forwards' }).finished;
+    film.style.opacity = '0';
+
+    // 2. It flies into the nav while the black lifts away. Measured now, not
+    //    earlier, in case anything shifted while the film played.
+    const end = target.getBoundingClientRect();
+    loader.classList.add('loader--lifting');
+    const flight = flyer.animate(
+      [{ transform: 'translate(0, 0) scale(1)' },
+       { transform: `translate(${end.left - left}px, ${end.top - top}px) scale(${end.width / width})` }],
+      { duration: 1100, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', fill: 'forwards' });
+    flyer.querySelector('.loader-flyer-alt')
+      ?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 650, delay: 400, easing: 'ease', fill: 'forwards' });
+    await flight.finished;
+  } finally {
+    target.style.visibility = '';
+    flyer.remove();
+  }
+}
+
 /* ============================================================== Boot ====== */
 
 async function boot() {
@@ -3029,7 +3119,8 @@ async function boot() {
   }
 
   await renderRoute(window.location.pathname);
-  playThemeIntro();
+  await playLoader();
+  playThemeNotice();
 }
 
 boot();

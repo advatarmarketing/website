@@ -699,12 +699,14 @@ a.glass-card:hover,
   font-size: 1rem;
   letter-spacing: 0.02em;
 }
-.brand svg { width: 22px; height: 24px; }
-.brand-word { display: none; }
-@media (min-width: 560px) { .brand-word { display: inline; } }
 
-/* A real logo file, once one is set in settings. */
-.brand-logo { height: 26px; width: auto; object-fit: contain; }
+/* The Advatar wordmark (cropped, transparent), sized by height. */
+.brand-logo {
+  display: block;
+  height: clamp(26px, 2.3vw, 34px);
+  width: auto;
+}
+.footer .brand-logo { height: 36px; }
 
 /* Reference nav: small uppercase items separated by commas. */
 .nav-links {
@@ -2500,6 +2502,66 @@ body[data-copy-editing='true'] [data-copy]:hover { outline-style: solid; }
   ::view-transition-new(root) { animation: none; }
   .media-play { transition: none; }
 }
+
+/* ============================================================ Loader ====== */
+
+/*
+  The homepage intro film. Its background is the film's own #171717, so on any
+  screen shape the letterboxing disappears into it. After the film, the black
+  lifts away while the wordmark flies into the nav.
+*/
+.loader {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: none;
+  background-color: #171717;
+  cursor: pointer;
+}
+html[data-loading] .loader { display: block; }
+html[data-loading] { overflow: hidden; }
+
+.loader-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: opacity 260ms var(--ease);
+}
+.loader--lifting {
+  background-color: transparent;
+  transition: background-color 900ms var(--ease);
+  pointer-events: none;
+}
+
+.loader-skip {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(1.25rem, 4vh, 2.25rem);
+  transform: translateX(-50%);
+  min-height: 40px;
+  padding: 0.5rem 1.1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(245, 241, 232, 0.72);
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: opacity 260ms var(--ease), color var(--mid) var(--ease);
+}
+.loader-skip:hover { color: #F5F1E8; }
+.loader--lifting .loader-skip { opacity: 0; }
+
+.loader-flyer {
+  position: fixed;
+  z-index: 301;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.loader-flyer img { position: absolute; inset: 0; width: 100%; height: 100%; }
+.loader-flyer-alt { opacity: 0; }
 
 /* ================================================== Reduced motion ======= */
 

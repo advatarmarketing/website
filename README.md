@@ -13,7 +13,7 @@ api/            one file per endpoint (Vercel serverless functions)
 lib/kv.js       the data layer — the ONE file to change if you swap database
 lib/            auth, http helpers, collection CRUD factory, seed loader
 data/seed.json  initial content; also the fallback for any key never written
-assets/         film-grain tile, keyed hero video (desktop + mobile) and its poster
+assets/         logos (dark + light), intro film, film-grain tile, keyed hero video and poster
 vercel.json     SPA rewrites, security headers
 ```
 
@@ -152,11 +152,29 @@ there is no flash of the wrong theme. The sun/moon toggle sits in the nav on eve
 and again inside the menu panel; where the View Transitions API exists, switching crossfades
 the whole page.
 
-**First-visit intro.** A browser that has never chosen a theme opens the site in light, then
-sweeps to dark while the toggle is spotlighted with a "Switch light / dark anytime" hint, so
-visitors learn the view can be changed. It plays once per browser, never overrides a stored
-choice, is skipped for `prefers-reduced-motion`, and doesn't record dark as the visitor's
-choice. Add `?intro=1` to any URL to replay it.
+**Theme notice.** On a browser's first visit, once the page is showing, the toggle is
+spotlighted for a few seconds with a "Switch light / dark anytime" hint. The theme itself never
+changes. It shows once per browser; add `?hint=1` to any URL to show it again.
+
+## Intro film and logo
+
+A fresh load of the **homepage** opens on the intro film (`assets/loader.mp4`, 5.4s, silent).
+When it ends on the Advatar wordmark, the wordmark flies from the centre of the screen into
+the nav, landing exactly on the logo, while the black backdrop fades away to reveal the page.
+
+- Click, tap, **Escape**, **Enter** or **Space** skips straight to the flight.
+- It never plays on other pages, for `prefers-reduced-motion`, or with `?loader=0`. If the
+  film can't load or play, the page is released at once, and a 15-second failsafe in
+  `index.html` covers the case where `app.js` never runs.
+- The film was trimmed from the supplied 10s cut: the wordmark is fully settled at 5.4s, and
+  the rest was a static hold.
+- The flight is measured against the film's frame. `FILM_MARK` in `app.js` is the wordmark's
+  position in the 1280×720 frame, so if the film is ever replaced, re-measure it there.
+
+The logos are `assets/logo-dark.png` (white, for dark mode) and `assets/logo-light.png`
+(black, for light mode), cropped tight from the supplied artwork on a transparent
+background. Custom logo URLs set in edit mode still override them, but a logo with a
+different shape won't line up with the film's wordmark during the flight.
 
 Two accent tokens exist on purpose:
 
