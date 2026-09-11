@@ -457,21 +457,22 @@ const driveThumb = (fileId, width = 720) =>
 function mediaTile({ driveFileId, imageUrl, title, ratio = 'reel', empty = 'Asset coming soon' }) {
   const shape = `media media--${ratio}`;
   /*
-    Drive videos render as a poster + play button, not an inline iframe. Drive's
-    player carries its own header bar and chunky controls, and inside a small
-    9:16 tile that chrome crowds and misaligns the picture. The poster fills the
-    tile exactly; playback opens in a lightbox sized to the video. A page of reels
-    also loads a few images instead of a dozen embedded players.
+    Drive videos play inline, right in the tile. The tile shows the poster — the
+    sharp frame over a blurred fill of itself — and as it scrolls into view,
+    Drive's player drops into a box sized to the video's own shape, centred in
+    the tile. A square video gets a square player with no black bars, one press
+    plays it, and fullscreen is in the player's own controls.
   */
   if (driveFileId) {
-    return `<button type="button" class="${shape} media--video" data-play="${esc(driveFileId)}"
-              data-title="${esc(title || 'Video')}" aria-label="Play ${esc(title || 'video')}">
+    const label = esc(title || 'Video');
+    return `<div class="${shape} media--video" data-video="${esc(driveFileId)}" data-title="${label}">
       <img class="media-thumb-fill" src="${esc(driveThumb(driveFileId))}" alt="" loading="lazy"
            decoding="async" referrerpolicy="no-referrer">
       <img class="media-thumb" src="${esc(driveThumb(driveFileId))}" alt="" loading="lazy"
            decoding="async" referrerpolicy="no-referrer">
-      <span class="media-play" aria-hidden="true">${icon('play')}</span>
-    </button>`;
+      <div class="media-frame"></div>
+      <button type="button" class="media-play" aria-label="Play ${label}">${icon('play')}</button>
+    </div>`;
   }
   const url = safeUrl(imageUrl);
   if (url) {
@@ -1223,6 +1224,30 @@ const PROCESS_STEPS = [
 ];
 
 async function renderLookInside() {
+  const settings = await load('settings');
+  const images = new Map((settings.lookInsideImages ?? []).map((entry) => [entry.step, entry]));
+
+  /* An image beside each step: a URL, or a Drive file shown via its thumbnail. */
+  const imageFor = (number) => {
+    const entry = images.get(number);
+    if (!entry) {
+      return `<div class="process-media media--empty">${icon('image')}<span>Image coming soon</span></div>`;
+    }
+    const src = /^(https?:|\/)/.test(entry.image) ? safeUrl(entry.image) : esc(driveThumb(entry.image, 1600));
+    return `<figure class="process-media">
+      <img src="${src}" alt="${esc(entry.caption || '')}" loading="lazy" decoding="async" referrerpolicy="no-referrer">
+      ${entry.caption ? `<figcaption class="tiny">${esc(entry.caption)}</figcaption>` : ''}
+    </figure>`;
+  };
+
+  // The step's short name, number included. Rendered twice: pinned beside the
+  // line on desktop, and above the text on mobile where there's no room for it.
+  const label = (step, index, extra = '') => `
+    <div class="process-label ${extra}">
+      <span class="process-num">${String(index + 1).padStart(2, '0')}</span>
+      <h2 class="process-title" data-copy="look.step.${index + 1}.label">${esc(step.label)}</h2>
+    </div>`;
+
   return `
   <main id="main" class="page">
     <section class="section">
@@ -1232,32 +1257,36 @@ async function renderLookInside() {
         <h1 class="display display--lg" data-reveal data-copy="look.title" style="max-width:20ch">What it's actually like to work with us.</h1>
         <p class="lede" data-reveal style="--i:1;margin-top:1.5rem"><span data-copy="look.lede">Start to finish.</span>
           <span class="dim" data-copy="look.lede-dim">No mystery, no black box — here's every step.</span></p>
+        ${editOnly(`
+        <div style="margin-top:1.5rem">
+          <button type="button" class="edit-chip" data-edit="look-images">${icon('image')} Edit step images</button>
+        </div>
+        `)}
       </div>
     </section>
 
-    <section class="section">
-      <div class="shell timeline">
-        <ol class="timeline-rail" aria-hidden="true" style="--progress:0">
+    <!--
+      Each step's name pins beside the line while its text and image scroll past,
+      and the line fills continuously as you read — lighting each marker as the
+      fill reaches it.
+    -->
+    <section class="section process-section">
+      <div class="shell">
+        <div class="process" style="--fill:0px">
+          <div class="process-line" aria-hidden="true"><span class="process-line-fill"></span></div>
           ${PROCESS_STEPS.map((step, index) => `
-            <li data-rail="${index}" data-active="${index === 0}" data-passed="${index === 0}">
-              <span class="dot"></span><span class="rail-label" data-copy="look.step.${index + 1}.label">${esc(step.label)}</span>
-            </li>`).join('')}
-        </ol>
-
-        <!-- Below 900px the side rail is hidden, so the steps carry their own
-             track, fill and markers instead. -->
-        <div class="timeline-track" style="--fill:0px">
-          <span class="timeline-fill" aria-hidden="true"></span>
-          <ol class="timeline-steps" style="list-style:none;margin:0;padding:0">
-            ${PROCESS_STEPS.map((step, index) => `
-              <li class="timeline-step" data-step="${index}" data-visible="false"
-                  data-active="${index === 0}" data-passed="${index === 0}">
-                <span class="step-dot" aria-hidden="true"></span>
-                <span class="step-num">${String(index + 1).padStart(2, '0')}</span>
-                <h3 data-copy="look.step.${index + 1}.title">${esc(step.title)}</h3>
-                <p data-copy="look.step.${index + 1}.copy">${esc(step.copy)}</p>
-              </li>`).join('')}
-          </ol>
+            <article class="process-step" data-step="${index}" data-shown="false" data-lit="false" data-current="false">
+              <div class="process-marker">
+                <span class="process-dot" aria-hidden="true"></span>
+                ${label(step, index, 'process-label--pinned')}
+              </div>
+              <div class="process-body">
+                ${label(step, index, 'process-label--inline')}
+                <h3 class="process-heading" data-copy="look.step.${index + 1}.title">${esc(step.title)}</h3>
+                <p class="process-copy" data-copy="look.step.${index + 1}.copy">${esc(step.copy)}</p>
+                ${imageFor(index + 1)}
+              </div>
+            </article>`).join('')}
         </div>
       </div>
     </section>
@@ -1265,90 +1294,62 @@ async function renderLookInside() {
 }
 
 function mountLookInside() {
-  const steps = $$('.timeline-step');
-  const rail = $('.timeline-rail');
-  const rails = $$('.timeline-rail li');
-  const track = $('.timeline-track');
-  if (!steps.length) return;
+  const process = $('.process');
+  const steps = $$('.process-step');
+  if (!process || !steps.length) return;
 
-  let activeIndex = 0;
-
-  /*
-    The inline (mobile) track fills to the centre of the active step's marker.
-    Measured with offsetTop, which ignores the reveal's translateY, so the fill
-    lands on the dot even while the step is still animating in.
-  */
-  function updateFill() {
-    const step = steps[activeIndex];
-    const dot = step?.querySelector('.step-dot');
-    if (!track || !dot) return;
-    track.style.setProperty('--fill', `${step.offsetTop + dot.offsetTop + dot.offsetHeight / 2}px`);
-  }
-
-  /** Light every marker up to `index` — side rail and inline track — and fill both. */
-  function setActive(index) {
-    activeIndex = index;
-    rails.forEach((item) => {
-      const position = Number(item.dataset.rail);
-      item.dataset.active = String(position === index);
-      item.dataset.passed = String(position <= index);
-    });
-    steps.forEach((item) => {
-      const position = Number(item.dataset.step);
-      item.dataset.active = String(position === index);
-      item.dataset.passed = String(position <= index);
-    });
-    // Fill proportionally to the active marker's position along the side rail.
-    const progress = rails.length > 1 ? index / (rails.length - 1) : 1;
-    rail?.style.setProperty('--progress', String(progress));
-    updateFill();
-  }
-
-  window.addEventListener('resize', updateFill);
-  registerCleanup(() => window.removeEventListener('resize', updateFill));
-
-  /* With reduced motion — or no observer — show everything up front. */
+  // A step's name and its text arrive together: the option on the left reveals
+  // as the text on the right does.
+  const reveal = (step) => { step.dataset.shown = 'true'; };
   if (prefersReducedMotion() || !('IntersectionObserver' in window)) {
-    steps.forEach((step) => { step.dataset.visible = 'true'; });
-    setActive(rails.length - 1);
-    return;
+    steps.forEach(reveal);
+  } else {
+    const revealer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        reveal(entry.target);
+        revealer.unobserve(entry.target);
+      }
+    }, { rootMargin: '0px 0px -25% 0px', threshold: 0.05 });
+    steps.forEach((step) => revealer.observe(step));
+    registerCleanup(() => revealer.disconnect());
   }
 
-  setActive(0);
-
-  // Reveal: a step brightens as it comes up the screen.
-  const revealer = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      if (entry.isIntersecting) entry.target.dataset.visible = 'true';
-    }
-  }, { rootMargin: '-25% 0px -35% 0px', threshold: 0.01 });
-
   /*
-    Active step: a thin band at the reading line, so exactly one step is lit at a
-    time — the one being read — however tall the screen. (A wide band lit the
-    next step early on phones, where two short steps fit inside it at once.)
+    The line fills continuously with scroll, as on the reference: its tip tracks
+    the reading line, 55% down the screen. A marker lights once the fill reaches
+    it, and the last lit marker is the current step. Markers are sticky, so their
+    positions are read live on each frame rather than cached.
   */
-  const spy = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      if (entry.isIntersecting) setActive(Number(entry.target.dataset.step));
-    }
-  }, { rootMargin: '-45% 0px -50% 0px', threshold: 0 });
+  let ticking = false;
+  function update() {
+    ticking = false;
+    const rect = process.getBoundingClientRect();
+    const reading = window.innerHeight * 0.55;
+    const fill = Math.min(Math.max(reading - rect.top, 0), rect.height);
+    process.style.setProperty('--fill', `${fill.toFixed(1)}px`);
 
-  steps.forEach((step) => { revealer.observe(step); spy.observe(step); });
-
-  // Fully scrolled, the last step can still sit below the reading line: finish the rail.
+    let current = -1;
+    steps.forEach((step, index) => {
+      const dot = step.querySelector('.process-dot').getBoundingClientRect();
+      const lit = dot.top + dot.height / 2 <= reading;
+      step.dataset.lit = String(lit);
+      if (lit) current = index;
+    });
+    steps.forEach((step, index) => { step.dataset.current = String(index === current); });
+  }
   const onScroll = () => {
-    if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 4) {
-      steps.at(-1).dataset.visible = 'true';
-      setActive(steps.length - 1);
-    }
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(update);
   };
-  window.addEventListener('scroll', onScroll, { passive: true });
 
+  update();
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
   registerCleanup(() => {
-    revealer.disconnect();
-    spy.disconnect();
     window.removeEventListener('scroll', onScroll);
+    window.removeEventListener('resize', onScroll);
   });
 }
 
@@ -1656,56 +1657,103 @@ window.addEventListener('popstate', () => renderRoute(window.location.pathname, 
 /* ------------------------------------------------------ Video playback --- */
 
 /*
-  Delegated once for the whole app, so it covers tiles on pages, in modals and in
-  carousel loop clones alike. (Copy-edit mode's capture handler runs first and
-  swallows the click while a label is being edited.)
+  Videos play inline. A tile receives Drive's player as it scrolls into view, so
+  a single press plays it like a normal embed — or straight away if its own play
+  button is pressed first (a carousel loop clone, say). Tiles are picked up
+  wherever they appear: a new page, an opened panel, a modal, a clone.
 */
+/*
+  Drive's player won't lay itself out narrower than 320px — in a smaller tile it
+  overflows and is cropped, leaving the play button off-centre and a black strip
+  down one side. So it's laid out at a comfortable 480px (or the frame's own
+  width, if wider) and scaled to fit. Fullscreen is unaffected: browsers drop
+  transforms on the fullscreened element.
+*/
+const PLAYER_BASE = 480;
+
+function sizePlayer(frame, width = frame.getBoundingClientRect().width) {
+  if (!width) return;
+  const base = Math.max(PLAYER_BASE, Math.round(width));
+  frame.style.setProperty('--base', `${base}px`);
+  frame.style.setProperty('--scale', String(width / base));
+}
+
+const frameSizer = 'ResizeObserver' in window
+  ? new ResizeObserver((entries) => {
+      for (const entry of entries) sizePlayer(entry.target, entry.contentRect.width);
+    })
+  : null;
+
+function hydrateVideo(tile) {
+  if (!tile || tile.dataset.hydrated === 'true') return;
+  const frame = tile.querySelector('.media-frame');
+  if (!frame) return;
+  tile.dataset.hydrated = 'true';
+  if (tile.dataset.aspect) frame.style.setProperty('--ratio', tile.dataset.aspect);
+  frame.innerHTML = `<iframe src="${driveEmbed(tile.dataset.video)}" title="${esc(tile.dataset.title || 'Video')}"
+    allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen
+    referrerpolicy="no-referrer"></iframe>`;
+  if (frameSizer) frameSizer.observe(frame);
+  else sizePlayer(frame);
+}
+
+const videoObserver = 'IntersectionObserver' in window
+  ? new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        videoObserver.unobserve(entry.target);
+        hydrateVideo(entry.target);
+      }
+    }, { rootMargin: '200px 0px' })
+  : null;
+
+function watchVideo(tile) {
+  if (tile.dataset.hydrated === 'true') return;
+  if (videoObserver) videoObserver.observe(tile);
+  else hydrateVideo(tile);
+}
+
+new MutationObserver((records) => {
+  for (const record of records) {
+    for (const node of record.addedNodes) {
+      if (node.nodeType !== 1) continue;
+      if (node.matches('.media--video')) watchVideo(node);
+      node.querySelectorAll('.media--video').forEach(watchVideo);
+    }
+    // Stop sizing players that have left the page, so they can be released.
+    for (const node of record.removedNodes) {
+      if (node.nodeType !== 1 || !frameSizer) continue;
+      if (node.matches('.media-frame')) frameSizer.unobserve(node);
+      node.querySelectorAll('.media-frame').forEach((frame) => frameSizer.unobserve(frame));
+    }
+  }
+}).observe(document.body, { childList: true, subtree: true });
+
 document.addEventListener('click', (event) => {
-  const tile = event.target.closest('[data-play]');
-  if (!tile) return;
+  const play = event.target.closest('.media-play');
+  if (!play) return;
   event.preventDefault();
-  openVideoLightbox({
-    id: tile.dataset.play,
-    title: tile.dataset.title,
-    aspect: Number(tile.dataset.aspect) || 9 / 16,
-  });
+  hydrateVideo(play.closest('.media--video'));
 });
 
-// A poster has the video's own shape, so record it for the lightbox. A poster
-// that fails to load (file not shared publicly) leaves a plain play tile.
+// A poster has the video's own shape: record it, and size the player to match.
+// A poster that fails to load (file not shared publicly) still gets a player.
 document.addEventListener('load', (event) => {
   const img = event.target;
   if (!(img instanceof HTMLImageElement) || !img.classList.contains('media-thumb')) return;
-  if (img.naturalWidth && img.naturalHeight) {
-    img.closest('[data-play]')?.setAttribute('data-aspect', String(img.naturalWidth / img.naturalHeight));
-  }
+  if (!img.naturalWidth || !img.naturalHeight) return;
+  const tile = img.closest('.media--video');
+  const aspect = String(img.naturalWidth / img.naturalHeight);
+  tile?.setAttribute('data-aspect', aspect);
+  tile?.querySelector('.media-frame')?.style.setProperty('--ratio', aspect);
 }, true);
 
 document.addEventListener('error', (event) => {
   const img = event.target;
   if (img instanceof HTMLImageElement && img.classList.contains('media-thumb')) {
-    img.closest('[data-play]')?.classList.add('media--thumb-failed');
+    img.closest('.media--video')?.classList.add('media--thumb-failed');
   }
 }, true);
-
-/**
- * Plays a Drive video in a lightbox sized to the video's own proportions, so
- * Drive's player never letterboxes it inside a frame of the wrong shape — the
- * cause of the old "blocked out" tiles.
- */
-function openVideoLightbox({ id, title, aspect }) {
-  const ratio = Math.min(Math.max(aspect || 9 / 16, 0.45), 2.2);   // clamp odd values
-  openModal({
-    title: title || 'Video',
-    className: 'modal--video',
-    body: `
-      <div class="video-frame" style="--ratio:${ratio.toFixed(4)}">
-        <iframe src="${driveEmbed(id)}" title="${esc(title || 'Video')}"
-                allow="autoplay; encrypted-media; fullscreen" allowfullscreen
-                referrerpolicy="no-referrer"></iframe>
-      </div>`,
-  });
-}
 
 /* --------------------------------------------------- Chrome behaviours --- */
 
@@ -1939,7 +1987,11 @@ function mountCarousel(root) {
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
 
-      if (!paused && !track.dataset.dragging) {
+      // Hovering the row (players included) or having clicked into one of its
+      // players holds the drift, so a video never slides away mid-watch.
+      const watching = track.matches(':hover')
+        || (document.activeElement?.tagName === 'IFRAME' && track.contains(document.activeElement));
+      if (!paused && !watching && !track.dataset.dragging) {
         carry += SPEED * dt;
         const whole = Math.floor(carry);
         if (whole) {
@@ -1971,40 +2023,44 @@ function mountCarousel(root) {
     });
   }
 
-  /* Mouse drag. Touch is left to the browser's own momentum scrolling. */
-  let dragging = false;
-  let startX = 0;
-  let startScroll = 0;
-
-  const onPointerDown = (event) => {
-    if (event.pointerType === 'touch') return;
-    dragging = true;
-    startX = event.clientX;
-    startScroll = track.scrollLeft;
-    track.setPointerCapture(event.pointerId);
-  };
+  /*
+    Mouse drag. Touch is left to the browser's own momentum scrolling.
+    The press is followed on the window, so a quick flick that leaves the row
+    still drags it. Capture is only taken once it's clearly a drag: capturing on
+    press makes Chrome retarget the click to the row, so play buttons and
+    "See more" would never receive it.
+  */
+  let press = null;
 
   const onPointerMove = (event) => {
-    if (!dragging) return;
-    const delta = event.clientX - startX;
-    // Only claim the gesture once it's clearly a drag, so clicks still work.
-    if (!track.dataset.dragging && Math.abs(delta) < 4) return;
-    track.dataset.dragging = 'true';
-    track.scrollLeft = startScroll - delta;
+    if (!press || event.pointerId !== press.id) return;
+    const delta = event.clientX - press.x;
+    if (!track.dataset.dragging) {
+      if (Math.abs(delta) < 4) return;        // still a click, not a drag
+      track.dataset.dragging = 'true';
+      try { track.setPointerCapture(press.id); } catch { /* pointer already released */ }
+    }
+    track.scrollLeft = press.scroll - delta;
   };
 
-  const endDrag = (event) => {
-    if (!dragging) return;
-    dragging = false;
-    if (track.hasPointerCapture?.(event.pointerId)) track.releasePointerCapture(event.pointerId);
-    // Defer so the click that ends a drag is swallowed, not followed.
+  const endDrag = () => {
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', endDrag);
+    window.removeEventListener('pointercancel', endDrag);
+    if (!press) return;
+    press = null;
+    // Deferred, so the click that ends a drag is swallowed rather than followed.
     requestAnimationFrame(() => { delete track.dataset.dragging; });
   };
 
-  track.addEventListener('pointerdown', onPointerDown);
-  track.addEventListener('pointermove', onPointerMove);
-  track.addEventListener('pointerup', endDrag);
-  track.addEventListener('pointercancel', endDrag);
+  track.addEventListener('pointerdown', (event) => {
+    if (event.pointerType === 'touch' || event.button !== 0) return;
+    press = { id: event.pointerId, x: event.clientX, scroll: track.scrollLeft };
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
+  });
+  registerCleanup(endDrag);
 
   window.addEventListener('resize', updateEnd);
   registerCleanup(() => window.removeEventListener('resize', updateEnd));
@@ -2838,6 +2894,19 @@ function mountEditHandlers() {
     'recent-wins': openRecentWinsEditor,
     submissions: openSubmissionsList,
     'sync-clients': openClientSync,
+
+    'look-images': () => openSettingsEditor({
+      title: 'Look Inside images',
+      subtitle: 'One line per image: the step number, then an image URL or a Google Drive link. Drive files must be shared as "Anyone with the link".',
+      fields: [{
+        name: 'lookInsideImages', label: 'Step images', type: 'rows',
+        columns: [
+          { key: 'step', label: 'Step (1–10)' },
+          { key: 'image', label: 'Image URL or Drive link' },
+          { key: 'caption', label: 'Caption (optional)' },
+        ],
+      }],
+    }),
   };
 
   $$('[data-edit]').forEach((button) => {

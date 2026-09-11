@@ -120,6 +120,14 @@ clients on Our Work) lists what the seed has that the live list doesn't — new 
 category changes — and applies only what you tick. It never deletes anything, and never
 touches videos, taglines or flags.
 
+### Look Inside images
+
+**Edit step images** on the Look Inside page takes one line per image: the step number, then
+an image URL **or a Google Drive link**, then an optional caption — e.g.
+`3 | https://drive.google.com/file/d/…/view | Our first meeting`. Drive links are stored as
+the file id and shown through Drive's thumbnail service, so the file must be shared as
+"Anyone with the link". Steps without an image show a placeholder.
+
 ## Environment variables
 
 | Variable | Required | Purpose |
@@ -185,12 +193,15 @@ Tokens live at the top of `styles.css`.
   `--i` stagger for grouped items. Driven by one shared IntersectionObserver.
 - **Hero parallax** — the background layers track scroll at 0.28–0.45×, and the hero
   content fades out as the next section rises over it.
-- **Look Inside** — a progress rail fills as you scroll, with a marker per step that lights
-  as its step reaches the reading line. On desktop it's a sticky side rail; below 900px the
-  steps carry their own track, fill and markers.
+- **Look Inside** — a sticky, scroll-filled timeline. Each step's name pins beside the line
+  while its text and image scroll past, then hands over to the next. The gold fill grows
+  continuously with scroll — its tip always on the reading line, 55% down the screen — and
+  lights each marker as it arrives. A step's name reveals together with its text. Below
+  900px the name moves above the text and the markers shrink, but the line and fill stay.
 - **Carousels** — Recent Wins and every client's video list drift slowly sideways and loop
   seamlessly. The loop clones are only made when a row is wider than the screen, so one or
-  two videos simply sit still. Hover, focus, drag or a hidden tab pauses the drift.
+  two videos simply sit still. Hover, focus, a player being watched, or a hidden tab pauses
+  the drift; rows can be dragged with the mouse or swiped.
 - **Instant by design** — the Our Work industry/client panels show and hide with no
   animation, as the original brief required. Photography and Websites unravel with a
   transition; they opt in via `data-animate="true"`.
@@ -217,11 +228,19 @@ the headline always sits on dark ground. Supplying `heroVideoDesktopUrl` /
 
 ## Videos
 
-Client videos are Google Drive files, shown as a **poster + play button** rather than an
-embedded player. Drive's player carries its own header and controls, and letterboxes any
-video whose shape doesn't match the frame — a square video in a portrait tile came out
-"blocked out". Tiles instead show the whole frame at its true shape over a blurred fill of
-itself, and playback opens in a lightbox sized to the video's own proportions.
+Client videos are Google Drive files that **play inline, right in their tile** — one press
+on the player plays it, and fullscreen is in the player's own controls. There is no pop-up.
+
+- Each tile shows the poster (the sharp frame over a blurred fill of itself). As the tile
+  scrolls into view, Drive's player drops into a box sized to the video's **true shape**,
+  centred in the tile — a square video gets a square player, with no black bars.
+- Drive's player won't lay itself out narrower than 320px; in a smaller tile it overflows
+  and crops. So it is laid out at 480px (or the frame's width, if wider) and scaled down to
+  the tile. Browsers drop the scale when the player goes fullscreen.
+- Drive's **Pop out** button opens the file in a new tab. A shield over that corner, sized in
+  the player's own units, swallows the click.
+- Carousels hold still while a row is hovered or one of its players has been clicked into,
+  so a video never slides away mid-watch.
 
 For a poster to appear, the Drive file must be shared as **Anyone with the link**. A file
 that isn't still shows as a play tile.

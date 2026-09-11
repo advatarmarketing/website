@@ -14,6 +14,21 @@ function cleanEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : '';
 }
 
+/**
+ * An image reference: a normal image URL, or a Google Drive share link / file id
+ * (stored as the bare id and shown through Drive's thumbnail service).
+ */
+function cleanImageRef(value) {
+  const raw = clean(value, 2000);
+  if (!raw) return '';
+  if (/^[A-Za-z0-9_-]{20,}$/.test(raw)) return raw;
+  if (/^https?:\/\/(drive|docs)\.google\.com\//i.test(raw)) {
+    const match = raw.match(/\/d\/([A-Za-z0-9_-]{10,})/) || raw.match(/[?&]id=([A-Za-z0-9_-]{10,})/);
+    return match ? match[1] : '';
+  }
+  return cleanUrl(raw);
+}
+
 function sanitize(settings) {
   const defaults = seedFor('settings');
   const input = settings && typeof settings === 'object' ? settings : {};
@@ -52,6 +67,15 @@ function sanitize(settings) {
         caption: clean(entry?.caption, 120),
       }))
       .filter((entry) => entry.imageUrl || entry.driveFileId),
+    /* Look Inside: an image beside each step, keyed by step number. */
+    lookInsideImages: (Array.isArray(input.lookInsideImages) ? input.lookInsideImages : [])
+      .slice(0, 40)
+      .map((entry) => ({
+        step: Math.round(Number(entry?.step)),
+        image: cleanImageRef(entry?.image),
+        caption: clean(entry?.caption, 140),
+      }))
+      .filter((entry) => entry.step >= 1 && entry.step <= 20 && entry.image),
   };
 }
 
