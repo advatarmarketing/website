@@ -767,7 +767,7 @@ async function renderOurWork() {
     const cards = group.flatMap((client) => (client.videos ?? [])
       .filter((video) => video.driveFileId && video.driveFileId !== leadId)
       .map((video) => ({ client, video })));
-    const quiet = group.filter((client) => !(client.videos ?? []).some((video) => video.driveFileId));
+    const hasReels = (client) => (client.videos ?? []).some((video) => video.driveFileId);
     const row = cards.length
       ? `<div class="carousel carousel--videos carousel--industry" data-carousel>
            <div class="carousel-track" data-autoscroll="true">
@@ -782,11 +782,16 @@ async function renderOurWork() {
            </div>
          </div>`
       : '';
-    const also = quiet.length
-      ? `<p class="tiny industry-also"><span data-copy="work.industry.also">Also worked with</span>
-           ${quiet.map((client) => esc(client.name)).join(' · ')}</p>`
-      : '';
-    return row + also;
+    // Every client in the industry, named underneath — those with no reels yet
+    // are simply a shade quieter.
+    const roster = `
+      <div class="industry-roster">
+        <p class="industry-roster-label" data-copy="work.industry.clients">Clients</p>
+        <ul>
+          ${group.map((client) => `<li${hasReels(client) ? '' : ' class="is-quiet"'}>${esc(client.name)}</li>`).join('')}
+        </ul>
+      </div>`;
+    return row + roster;
   };
 
   const industryPanel = ([name, group], index) => {
@@ -810,9 +815,6 @@ async function renderOurWork() {
             <figcaption>
               <span class="industry-lead-label">${icon('film')}<span data-copy="work.industry.lead">Feature reel</span></span>
               ${lead?.title ? `<span class="industry-lead-title">${esc(lead.title)}</span>` : ''}
-              <ul class="industry-names">
-                ${group.slice(0, 3).map((client) => `<li>${esc(client.name)}</li>`).join('')}
-              </ul>
             </figcaption>
           </figure>
           <div class="industry-clients">${industryReels(group, lead?.driveFileId)}</div>
@@ -1709,10 +1711,14 @@ const frameSizer = 'ResizeObserver' in window
 
 /*
   Players are heavy — every Drive embed is a whole web page of its own — and a
-  phone reloads the tab once it holds too many. So a player only exists while
-  its tile is on screen: it arrives once the tile has settled into view (a quick
-  scroll past loads nothing), goes again shortly after the tile leaves, and only
-  a handful are ever live at once. The one being watched is never evicted.
+  phone reloads the tab once it holds too many. So a player only arrives once its
+  tile has settled into view (a quick scroll past loads nothing), and only a
+  handful are ever live at once: past that, the oldest one nobody is watching,
+  off-screen first, gives its place up.
+
+  A player that scrolls away is kept rather than dropped straight away. Drive
+  limits how often viewers who aren't signed in can load its player, so reloading
+  a video every time it drifts back into view would use that allowance up fast.
 */
 const LIVE_LIMIT = window.matchMedia('(hover: none), (max-width: 720px)').matches ? 4 : 10;
 const livePlayers = new Set();          // tiles holding a player, oldest first
@@ -1772,11 +1778,7 @@ const videoObserver = 'IntersectionObserver' in window
         if (entry.isIntersecting) {
           laterFor(tile, () => {
             if (tile.isConnected && tile.dataset.inView === 'true') hydrateVideo(tile);
-          }, 300);
-        } else if (tile.dataset.hydrated === 'true') {
-          laterFor(tile, () => {
-            if (tile.dataset.inView !== 'true' && !document.fullscreenElement) releaseVideo(tile);
-          }, 1500);
+          }, 800);
         } else {
           clearTimeout(tileTimers.get(tile));
         }

@@ -264,11 +264,16 @@ For a poster to appear, the Drive file must be shared as **Anyone with the link*
 that isn't still shows as a play tile.
 
 **Players are rationed.** Every Drive embed is a whole web page, and a phone reloads the tab
-once it holds too many — which is what made the site "refresh" mid-scroll. So a player
-only exists while its tile is on screen: it loads once the tile has settled into view, is
-released a moment after it leaves, and no more than 4 (phones) or 10 (desktop) are ever
-live at once. The one being watched is never evicted. Posters use a small thumbnail for the
-same reason.
+once it holds too many — which is what made the site "refresh" mid-scroll. So a player only
+loads once its tile has been in view for a moment, and no more than 4 (phones) or 10
+(desktop) are ever live at once; past that, the oldest one nobody is watching gives its
+place up. Posters use a small thumbnail for the same reason.
+
+**Drive's viewing limit.** Google Drive caps how often viewers who aren't signed in can
+load its player, per network. Once a network hits it, every player shows "Sign in to your
+Google Account to continue to play this video" until the limit resets. That's why players
+are kept once loaded rather than reloaded each time they scroll back into view. Drive isn't
+a video host, though: if the site gets real traffic, move the reels to a proper one.
 
 On touch screens a carousel's drift holds while a finger is on it and for a couple of
 seconds after, so it never fights a swipe.
@@ -277,8 +282,9 @@ seconds after, so it never fights a swipe.
 
 - **Selected reels** — clients ticked *Featured*, as a drifting carousel (up to 12).
 - **By industry** — each industry opens on its **feature reel**, then every other reel in
-  that industry in one small drifting row, each card named for its client. Clients with no
-  reels yet are listed underneath. No reel appears twice.
+  that industry in one small drifting row, each card named for its client. Every client in
+  the industry is listed underneath (those with no reels yet a shade quieter). No reel
+  appears twice.
 - **Feature reels** (edit chip beside Manage clients) — one Google Drive link per industry.
   Upload the video to Drive, share it as "Anyone with the link", paste the link. Leave one
   blank and that industry leads with its first client video instead.
