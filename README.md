@@ -92,7 +92,7 @@ Once unlocked, small `edit` chips appear beside every editable region:
 | Page       | What you can edit                                                    |
 |------------|----------------------------------------------------------------------|
 | Home       | Hero video / poster / hand asset URLs; light + dark logos; background texture; which clients are Recent Wins |
-| Our Work   | Clients (videos, category, notes, case-study flag), websites, photography, branding, results |
+| Our Work   | Clients (videos, category, notes, case-study flag), each industry's feature reel, websites, photography, branding, results |
 | About      | Founded / clients / team numbers — these feed the copy directly       |
 | Contact    | WhatsApp number, email; read and delete contact submissions           |
 | We're Hiring | Behind-the-scenes gallery; add/edit/delete vacancies                |
@@ -262,6 +262,26 @@ on the player plays it, and fullscreen is in the player's own controls. There is
 
 For a poster to appear, the Drive file must be shared as **Anyone with the link**. A file
 that isn't still shows as a play tile.
+
+**Players are rationed.** Every Drive embed is a whole web page, and a phone reloads the tab
+once it holds too many — which is what made the site "refresh" mid-scroll. So a player
+only exists while its tile is on screen: it loads once the tile has settled into view, is
+released a moment after it leaves, and no more than 4 (phones) or 10 (desktop) are ever
+live at once. The one being watched is never evicted. Posters use a small thumbnail for the
+same reason.
+
+On touch screens a carousel's drift holds while a finger is on it and for a couple of
+seconds after, so it never fights a swipe.
+
+### Our Work reels
+
+- **Selected reels** — clients ticked *Featured*, as a drifting carousel (up to 12).
+- **By industry** — each industry opens on its **feature reel**, then every other reel in
+  that industry in one small drifting row, each card named for its client. Clients with no
+  reels yet are listed underneath. No reel appears twice.
+- **Feature reels** (edit chip beside Manage clients) — one Google Drive link per industry.
+  Upload the video to Drive, share it as "Anyone with the link", paste the link. Leave one
+  blank and that industry leads with its first client video instead.
 
 ## Not built
 

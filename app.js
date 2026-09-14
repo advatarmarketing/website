@@ -452,10 +452,12 @@ function mediaTile({ driveFileId, imageUrl, title, ratio = 'reel', empty = 'Asse
   */
   if (driveFileId) {
     const label = esc(title || 'Video');
+    // The fill is blurred to nothing, so a tiny thumbnail does — dozens of tiles
+    // decoding full-size posters twice over is what phones run out of memory on.
     return `<div class="${shape} media--video" data-video="${esc(driveFileId)}" data-title="${label}">
-      <img class="media-thumb-fill" src="${esc(driveThumb(driveFileId))}" alt="" loading="lazy"
+      <img class="media-thumb-fill" src="${esc(driveThumb(driveFileId, 60))}" alt="" loading="lazy"
            decoding="async" referrerpolicy="no-referrer">
-      <img class="media-thumb" src="${esc(driveThumb(driveFileId))}" alt="" loading="lazy"
+      <img class="media-thumb" src="${esc(driveThumb(driveFileId, 540))}" alt="" loading="lazy"
            decoding="async" referrerpolicy="no-referrer">
       <div class="media-frame"></div>
       <button type="button" class="media-play" aria-label="Play ${label}">${icon('play')}</button>
@@ -692,36 +694,29 @@ function openClientModal(client) {
 
 /* ------------------------------------------------------------ Our Work --- */
 
-async function renderOurWork() {
-  const [settings, clients, websites, photography, branding] = await Promise.all([
-    load('settings'), load('clients'), load('websites'), load('photography'), load('branding'),
-  ]);
+/*
+  Display order for client categories. Personal Brands & Creators leads;
+  Car & Transport sits at the back. Anything not listed falls in alphabetically
+  after the known ones, so a new category added in edit mode still appears.
+*/
+const CATEGORY_ORDER = [
+  'Personal Brands & Creators',
+  'Food & Beverage',
+  'Community & Islamic Organisations',
+  'Clothing & Merch',
+  'Fitness & Sport',
+  'Education',
+  'Professional Services',
+  'Photography',
+  'Car & Transport',
+];
 
-  const featured = clients.filter((client) => client.featured).slice(0, 4);
-  const stats = settings.resultsStats ?? [];
-
-  /*
-    Display order for client categories. Personal Brands & Creators leads;
-    Car & Transport sits at the back. Anything not listed falls in alphabetically
-    after the known ones, so a new category added in edit mode still appears.
-  */
-  const CATEGORY_ORDER = [
-    'Personal Brands & Creators',
-    'Food & Beverage',
-    'Community & Islamic Organisations',
-    'Clothing & Merch',
-    'Fitness & Sport',
-    'Education',
-    'Professional Services',
-    'Photography',
-    'Car & Transport',
-  ];
-  const categoryRank = (name) => {
+/** Clients grouped by industry, as [name, clients] pairs in display order. */
+function industriesOf(clients) {
+  const rank = (name) => {
     const index = CATEGORY_ORDER.indexOf(name);
     return index === -1 ? CATEGORY_ORDER.length : index;
   };
-
-  /* Group clients by industry for the unravel panels. */
   const grouped = clients.reduce((map, client) => {
     const key = client.category || 'Uncategorised';
     map.set(key, [...(map.get(key) ?? []), client]);
@@ -729,8 +724,32 @@ async function renderOurWork() {
   }, new Map());
   // Personal Brands & Creators always has its place, even before any are added.
   if (!grouped.has('Personal Brands & Creators')) grouped.set('Personal Brands & Creators', []);
-  const industries = [...grouped]
-    .sort((a, b) => categoryRank(a[0]) - categoryRank(b[0]) || a[0].localeCompare(b[0]));
+  return [...grouped].sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]));
+}
+
+const sameIndustry = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+
+/**
+ * The reel that opens an industry: the one chosen for it in edit mode, or, until
+ * one is, the first client video in the group. Either way it is left out of the
+ * client rows below it, so no reel shows twice.
+ */
+function industryLead(name, group, settings) {
+  const chosen = (settings.industryReels ?? []).find((entry) => sameIndustry(entry.industry, name));
+  if (chosen?.video) return { driveFileId: chosen.video, title: chosen.title || '' };
+  const client = group.find((item) => item.videos?.some((video) => video.driveFileId));
+  const video = client?.videos.find((item) => item.driveFileId);
+  return video ? { driveFileId: video.driveFileId, title: client.name } : null;
+}
+
+async function renderOurWork() {
+  const [settings, clients, websites, photography, branding] = await Promise.all([
+    load('settings'), load('clients'), load('websites'), load('photography'), load('branding'),
+  ]);
+
+  const featured = clients.filter((client) => client.featured).slice(0, 12);
+  const stats = settings.resultsStats ?? [];
+  const industries = industriesOf(clients);
 
   const resultsRow = stats.length
     ? stats.map((stat) =>
@@ -738,58 +757,70 @@ async function renderOurWork() {
       ).join('<span class="divider" aria-hidden="true">|</span>')
     : '<span class="result muted">Add your results in edit mode</span>';
 
-  const clientRow = (client) => `
-    <div class="client-row" data-client-row="${esc(client.id)}">
-      <div>
-        ${mediaTile({ driveFileId: client.videos?.[0]?.driveFileId, title: `${client.name} — reel`, empty: 'Video coming soon' })}
-      </div>
-      <div>
-        <div class="client-row-head">
-          <div>
-            <h4 class="disclosure-title" style="font-size:1.0625rem">${esc(client.name)}</h4>
-            ${client.tagline ? `<p class="tiny" style="margin:0.25rem 0 0">${esc(client.tagline)}</p>` : ''}
-          </div>
-          <button type="button" class="icon-btn" data-toggle="client-${esc(client.id)}"
-                  aria-expanded="false" aria-controls="client-${esc(client.id)}"
-                  aria-label="Show all videos for ${esc(client.name)}">${icon('chevronRight')}</button>
-        </div>
-        <div class="disclosure-panel" id="client-${esc(client.id)}" hidden>
-          ${client.videos?.length
-            ? `<div style="margin-top:1rem">${videoCarousel(client)}</div>`
-            : `<p class="tiny" style="margin-top:1rem">No videos added for ${esc(client.name)} yet.</p>`}
-        </div>
-      </div>
-    </div>`;
+  /*
+    Every reel in an industry is on show at once — one small drifting row, like
+    the home carousel, each card named for its client — rather than behind a
+    button per client. The lead reel is left out, so nothing appears twice, and
+    clients with no reels yet are simply named underneath.
+  */
+  const industryReels = (group, leadId) => {
+    const cards = group.flatMap((client) => (client.videos ?? [])
+      .filter((video) => video.driveFileId && video.driveFileId !== leadId)
+      .map((video) => ({ client, video })));
+    const quiet = group.filter((client) => !(client.videos ?? []).some((video) => video.driveFileId));
+    const row = cards.length
+      ? `<div class="carousel carousel--videos carousel--industry" data-carousel>
+           <div class="carousel-track" data-autoscroll="true">
+             ${cards.map(({ client, video }, index) => `
+               <figure class="video-card" style="--i:${index}">
+                 ${mediaTile({ driveFileId: video.driveFileId, title: `${client.name} — ${video.title || 'reel'}` })}
+                 <figcaption>
+                   <span class="video-card-client">${esc(client.name)}</span>
+                   ${video.title ? `<span class="tiny">${esc(video.title)}</span>` : ''}
+                 </figcaption>
+               </figure>`).join('')}
+           </div>
+         </div>`
+      : '';
+    const also = quiet.length
+      ? `<p class="tiny industry-also"><span data-copy="work.industry.also">Also worked with</span>
+           ${quiet.map((client) => esc(client.name)).join(' · ')}</p>`
+      : '';
+    return row + also;
+  };
 
-  const industryPanel = ([name, group], index) => `
+  const industryPanel = ([name, group], index) => {
+    const lead = industryLead(name, group, settings);
+    return `
     <div class="disclosure" data-reveal style="--i:${index}">
       <button type="button" class="disclosure-head" data-toggle="industry-${esc(name)}"
               aria-expanded="false" aria-controls="industry-${esc(name)}">
         <span class="disclosure-title">${esc(name)}</span>
-        <span class="disclosure-meta">
-          <span class="tiny">${group.length} client${group.length === 1 ? '' : 's'}</span>
-          ${icon('chevronRight')}
-        </span>
+        <span class="disclosure-meta">${icon('chevronRight')}</span>
       </button>
       <div class="disclosure-panel" id="industry-${esc(name)}" hidden>
         ${group.length ? `
         <div class="industry-layout">
-          <div>
+          <figure class="industry-lead">
             ${mediaTile({
-              // The key video is the first client in the group that has one.
-              driveFileId: group.find((client) => client.videos?.length)?.videos[0].driveFileId,
-              title: `${name} — key video`,
-              empty: 'Key video coming soon',
+              driveFileId: lead?.driveFileId,
+              title: `${name} — ${lead?.title || 'feature reel'}`,
+              empty: 'Feature reel coming soon',
             })}
-            <ul class="industry-names">
-              ${group.slice(0, 3).map((client) => `<li>${esc(client.name)}</li>`).join('')}
-            </ul>
-          </div>
-          <div>${group.map(clientRow).join('')}</div>
+            <figcaption>
+              <span class="industry-lead-label">${icon('film')}<span data-copy="work.industry.lead">Feature reel</span></span>
+              ${lead?.title ? `<span class="industry-lead-title">${esc(lead.title)}</span>` : ''}
+              <ul class="industry-names">
+                ${group.slice(0, 3).map((client) => `<li>${esc(client.name)}</li>`).join('')}
+              </ul>
+            </figcaption>
+          </figure>
+          <div class="industry-clients">${industryReels(group, lead?.driveFileId)}</div>
         </div>`
         : `<p class="tiny" style="padding-block:0.25rem 1.25rem">No clients in ${esc(name)} yet — add them in edit mode.</p>`}
       </div>
     </div>`;
+  };
 
   const photoCategory = (category, index) => `
     <div class="disclosure" data-reveal style="--i:${index}">
@@ -852,11 +883,15 @@ async function renderOurWork() {
         </div>
 
         ${featured.length
-          ? `<div class="reel-grid">${featured.map((client, index) => `
-              <figure data-reveal style="display:grid;gap:0.75rem;--i:${index}">
-                ${mediaTile({ driveFileId: client.videos?.[0]?.driveFileId, title: `${client.name} — reel`, empty: 'Video coming soon' })}
-                <figcaption class="tiny">${esc(client.tagline || client.name)}</figcaption>
-              </figure>`).join('')}</div>`
+          ? `<div class="carousel carousel--videos carousel--reels" data-carousel data-reveal>
+               <div class="carousel-track" data-autoscroll="true">
+                 ${featured.map((client, index) => `
+                   <figure class="video-card" style="--i:${index}">
+                     ${mediaTile({ driveFileId: client.videos?.[0]?.driveFileId, title: `${client.name} — reel`, empty: 'Video coming soon' })}
+                     <figcaption class="tiny">${esc(client.tagline || client.name)}</figcaption>
+                   </figure>`).join('')}
+               </div>
+             </div>`
           : emptyState('No featured reels yet', 'Mark clients as featured in edit mode to show them here.')}
 
         <!-- Both ways into the client work, side by side. -->
@@ -870,6 +905,7 @@ async function renderOurWork() {
             ${icon('layers')}<span data-copy="work.video.all-clients">View all client work</span>
           </button>
           ${editOnly(`<button type="button" class="edit-chip" data-edit="clients">${icon('pencil')} Manage clients</button>
+            <button type="button" class="edit-chip" data-edit="industry-reels">${icon('film')} Feature reels</button>
             <button type="button" class="edit-chip" data-edit="sync-clients">${icon('layers')} Sync clients</button>`)}
         </div>
 
@@ -896,7 +932,6 @@ async function renderOurWork() {
               <div class="client-index" data-reveal>
                 <h4 class="client-index-head">
                   <span>${esc(name)}</span>
-                  <span class="tiny">${group.length}</span>
                 </h4>
                 <ul class="client-index-list">
                   ${group.map((client) => `
@@ -990,6 +1025,7 @@ async function renderOurWork() {
 
 function mountOurWork() {
   $('[data-results-modal]')?.addEventListener('click', openCaseStudies);
+  mountCarousel($('.carousel--reels'));
 }
 
 /**
@@ -1671,10 +1707,45 @@ const frameSizer = 'ResizeObserver' in window
     })
   : null;
 
+/*
+  Players are heavy — every Drive embed is a whole web page of its own — and a
+  phone reloads the tab once it holds too many. So a player only exists while
+  its tile is on screen: it arrives once the tile has settled into view (a quick
+  scroll past loads nothing), goes again shortly after the tile leaves, and only
+  a handful are ever live at once. The one being watched is never evicted.
+*/
+const LIVE_LIMIT = window.matchMedia('(hover: none), (max-width: 720px)').matches ? 4 : 10;
+const livePlayers = new Set();          // tiles holding a player, oldest first
+const tileTimers = new WeakMap();
+
+function laterFor(tile, fn, delay) {
+  clearTimeout(tileTimers.get(tile));
+  tileTimers.set(tile, setTimeout(fn, delay));
+}
+
+function isWatching(tile) {
+  const active = document.activeElement;
+  return tile.dataset.engaged === 'true'
+    || (active?.tagName === 'IFRAME' && tile.contains(active))
+    || Boolean(document.fullscreenElement && tile.contains(document.fullscreenElement));
+}
+
+function releaseVideo(tile) {
+  const frame = tile.querySelector('.media-frame');
+  if (frame) {
+    frameSizer?.unobserve(frame);
+    frame.replaceChildren();
+  }
+  delete tile.dataset.hydrated;
+  delete tile.dataset.engaged;
+  livePlayers.delete(tile);
+}
+
 function hydrateVideo(tile) {
   if (!tile || tile.dataset.hydrated === 'true') return;
   const frame = tile.querySelector('.media-frame');
   if (!frame) return;
+  clearTimeout(tileTimers.get(tile));
   tile.dataset.hydrated = 'true';
   if (tile.dataset.aspect) frame.style.setProperty('--ratio', tile.dataset.aspect);
   frame.innerHTML = `<iframe src="${driveEmbed(tile.dataset.video)}" title="${esc(tile.dataset.title || 'Video')}"
@@ -1682,22 +1753,46 @@ function hydrateVideo(tile) {
     referrerpolicy="no-referrer"></iframe>`;
   if (frameSizer) frameSizer.observe(frame);
   else sizePlayer(frame);
+
+  livePlayers.add(tile);
+  if (livePlayers.size <= LIVE_LIMIT) return;
+  // Over the limit: let go of the oldest players nobody is watching,
+  // off-screen ones before visible ones.
+  const spare = [...livePlayers]
+    .filter((other) => other !== tile && !isWatching(other))
+    .sort((a, b) => Number(a.dataset.inView === 'true') - Number(b.dataset.inView === 'true'));
+  while (livePlayers.size > LIVE_LIMIT && spare.length) releaseVideo(spare.shift());
 }
 
 const videoObserver = 'IntersectionObserver' in window
   ? new IntersectionObserver((entries) => {
       for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        videoObserver.unobserve(entry.target);
-        hydrateVideo(entry.target);
+        const tile = entry.target;
+        tile.dataset.inView = String(entry.isIntersecting);
+        if (entry.isIntersecting) {
+          laterFor(tile, () => {
+            if (tile.isConnected && tile.dataset.inView === 'true') hydrateVideo(tile);
+          }, 300);
+        } else if (tile.dataset.hydrated === 'true') {
+          laterFor(tile, () => {
+            if (tile.dataset.inView !== 'true' && !document.fullscreenElement) releaseVideo(tile);
+          }, 1500);
+        } else {
+          clearTimeout(tileTimers.get(tile));
+        }
       }
-    }, { rootMargin: '200px 0px' })
+    }, { threshold: 0.35 })
   : null;
 
 function watchVideo(tile) {
-  if (tile.dataset.hydrated === 'true') return;
   if (videoObserver) videoObserver.observe(tile);
   else hydrateVideo(tile);
+}
+
+function forgetVideo(tile) {
+  videoObserver?.unobserve(tile);
+  clearTimeout(tileTimers.get(tile));
+  releaseVideo(tile);
 }
 
 new MutationObserver((records) => {
@@ -1707,11 +1802,11 @@ new MutationObserver((records) => {
       if (node.matches('.media--video')) watchVideo(node);
       node.querySelectorAll('.media--video').forEach(watchVideo);
     }
-    // Stop sizing players that have left the page, so they can be released.
+    // Tiles that have left the page give up their players and their slots.
     for (const node of record.removedNodes) {
-      if (node.nodeType !== 1 || !frameSizer) continue;
-      if (node.matches('.media-frame')) frameSizer.unobserve(node);
-      node.querySelectorAll('.media-frame').forEach((frame) => frameSizer.unobserve(frame));
+      if (node.nodeType !== 1) continue;
+      if (node.matches('.media--video')) forgetVideo(node);
+      node.querySelectorAll('.media--video').forEach(forgetVideo);
     }
   }
 }).observe(document.body, { childList: true, subtree: true });
@@ -1720,7 +1815,21 @@ document.addEventListener('click', (event) => {
   const play = event.target.closest('.media-play');
   if (!play) return;
   event.preventDefault();
-  hydrateVideo(play.closest('.media--video'));
+  const tile = play.closest('.media--video');
+  if (tile) tile.dataset.engaged = 'true';
+  hydrateVideo(tile);
+});
+
+// Pressing into a player moves focus into its frame, which blurs the window.
+// That player is the one being watched — keep it through any eviction.
+window.addEventListener('blur', () => {
+  setTimeout(() => {
+    const active = document.activeElement;
+    if (active?.tagName !== 'IFRAME') return;
+    livePlayers.forEach((tile) => { delete tile.dataset.engaged; });
+    const tile = active.closest('.media--video');
+    if (tile) tile.dataset.engaged = 'true';
+  }, 0);
 });
 
 // A poster has the video's own shape: record it, and size the player to match.
@@ -1941,6 +2050,13 @@ function mountCarousel(root) {
       clone.removeAttribute('data-reveal');
       clone.dataset.clone = 'true';
       $$('a, button', clone).forEach((el) => el.setAttribute('tabindex', '-1'));
+      // A clone starts as a poster; it gets a player of its own when it's seen.
+      $$('.media--video', clone).forEach((tile) => {
+        delete tile.dataset.hydrated;
+        delete tile.dataset.inView;
+        delete tile.dataset.engaged;
+        $('.media-frame', tile)?.replaceChildren();
+      });
       track.append(clone);
     }
   }
@@ -1963,22 +2079,40 @@ function mountCarousel(root) {
   /* ---- Slow continuous drift -------------------------------------------- */
   if (looping) {
     const SPEED = 14;                 // px per second — a slow walk, not a slide
+    const canHover = window.matchMedia('(hover: hover)').matches;
     let paused = false;
     let last = performance.now();
     let frame = 0;
     // Sub-pixel carry, or a 14px/s speed would floor to zero every frame.
     let carry = 0;
+    /*
+      A finger on the row, or its momentum still carrying it, holds the drift —
+      otherwise the drift writes scrollLeft every frame and fights the swipe.
+      Any scroll the drift didn't make is someone scrolling.
+    */
+    let holdUntil = 0;
+    let expected = track.scrollLeft;
+    const holdFor = (ms) => { holdUntil = performance.now() + ms; };
+    track.addEventListener('touchstart', () => holdFor(60000), { passive: true });
+    track.addEventListener('touchend', () => holdFor(2500), { passive: true });
+    track.addEventListener('touchcancel', () => holdFor(2500), { passive: true });
+    track.addEventListener('scroll', () => {
+      if (Math.abs(track.scrollLeft - expected) > 2 && holdUntil < performance.now() + 2500) holdFor(2500);
+    }, { passive: true });
 
     const tick = (now) => {
       if (!track.isConnected) return;   // its modal closed, or the page changed
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
 
-      // Hovering the row (players included) or having clicked into one of its
-      // players holds the drift, so a video never slides away mid-watch.
-      const watching = track.matches(':hover')
-        || (document.activeElement?.tagName === 'IFRAME' && track.contains(document.activeElement));
-      if (!paused && !watching && !track.dataset.dragging) {
+      // Hovering the row (players included) or having pressed into one of its
+      // players holds the drift, so a video never slides away mid-watch. Hover
+      // only counts for a real mouse: a phone keeps :hover stuck on whatever
+      // was last tapped, which would freeze the row for good.
+      const watching = (canHover && track.matches(':hover'))
+        || (document.activeElement?.tagName === 'IFRAME' && track.contains(document.activeElement))
+        || Boolean(track.querySelector('.media--video[data-engaged="true"]'));
+      if (!paused && !watching && !track.dataset.dragging && now >= holdUntil) {
         carry += SPEED * dt;
         const whole = Math.floor(carry);
         if (whole) {
@@ -1988,6 +2122,7 @@ function mountCarousel(root) {
           if (width && track.scrollLeft >= width) track.scrollLeft -= width;
         }
       }
+      expected = track.scrollLeft;
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
@@ -2879,6 +3014,7 @@ function mountEditHandlers() {
     }),
 
     'recent-wins': openRecentWinsEditor,
+    'industry-reels': openIndustryReelsEditor,
     submissions: openSubmissionsList,
     'sync-clients': openClientSync,
 
@@ -2898,6 +3034,72 @@ function mountEditHandlers() {
 
   $$('[data-edit]').forEach((button) => {
     button.addEventListener('click', () => handlers[button.dataset.edit]?.());
+  });
+}
+
+/**
+ * The reel that opens each industry on Our Work. One Drive link per industry;
+ * a blank one falls back to that industry's first client video.
+ */
+function openIndustryReelsEditor() {
+  const names = industriesOf(state.clients ?? []).map(([name]) => name);
+  const current = state.settings?.industryReels ?? [];
+  const entryFor = (name) => current.find((entry) => sameIndustry(entry.industry, name)) ?? {};
+
+  openModal({
+    title: 'Feature reels',
+    subtitle: 'The reel that opens each industry. Upload the video to Google Drive, share it as "Anyone with the link", and paste the link here. Leave one blank to lead with that industry\'s first client video.',
+    body: `
+      <form class="editor-form" id="reels-form">
+        <div class="editor-grid">
+          ${names.map((name, index) => {
+            const entry = entryFor(name);
+            return `
+            <div class="field" data-industry="${esc(name)}">
+              <label for="reel-${index}">${esc(name)}</label>
+              <input id="reel-${index}" name="video" type="text" placeholder="Google Drive link"
+                     value="${esc(entry.video ? `https://drive.google.com/file/d/${entry.video}/view` : '')}">
+              <input name="title" type="text" placeholder="Caption (optional) — e.g. the client's name"
+                     aria-label="${esc(name)} caption" value="${esc(entry.title ?? '')}">
+            </div>`;
+          }).join('')}
+        </div>
+        <p class="form-status" role="status" aria-live="polite"></p>
+        <div class="editor-actions">
+          <button type="button" class="btn" data-close>Cancel</button>
+          <button type="submit" class="btn btn--gold">Save</button>
+        </div>
+      </form>`,
+    onMount(host) {
+      const form = $('#reels-form', host);
+      const status = $('.form-status', form);
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        status.dataset.state = '';
+        status.textContent = 'Saving…';
+        const edited = $$('[data-industry]', form).map((field) => ({
+          industry: field.dataset.industry,
+          video: $('[name="video"]', field).value.trim(),
+          title: $('[name="title"]', field).value.trim(),
+        })).filter((entry) => entry.video);
+        // Industries that no longer have clients keep their reel for when they return.
+        const kept = current.filter((entry) => !names.some((name) => sameIndustry(name, entry.industry)));
+        try {
+          const { settings } = await api.put('/api/settings', { industryReels: [...edited, ...kept] });
+          state.settings = settings;
+          const missing = edited.length - settings.industryReels.filter((entry) =>
+            edited.some((item) => sameIndustry(item.industry, entry.industry))).length;
+          closeModal();
+          toast(missing ? `Saved — ${missing} link${missing === 1 ? " wasn't a Drive link" : "s weren't Drive links"}.` : 'Feature reels saved.',
+            missing ? 'error' : undefined);
+          await renderRoute(window.location.pathname, { restoreScroll: true });
+        } catch (error) {
+          status.dataset.state = 'error';
+          status.textContent = error.message;
+          toast(error.message, 'error');
+        }
+      });
+    },
   });
 }
 

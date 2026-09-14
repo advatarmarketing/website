@@ -29,6 +29,15 @@ function cleanImageRef(value) {
   return cleanUrl(raw);
 }
 
+/** A Google Drive video: a share link or a bare file id, stored as the id. */
+function cleanDriveId(value) {
+  const raw = clean(value, 2000);
+  if (/^[A-Za-z0-9_-]{20,}$/.test(raw)) return raw;
+  if (!/^https?:\/\/(drive|docs)\.google\.com\//i.test(raw)) return '';
+  const match = raw.match(/\/d\/([A-Za-z0-9_-]{10,})/) || raw.match(/[?&]id=([A-Za-z0-9_-]{10,})/);
+  return match ? match[1] : '';
+}
+
 function sanitize(settings) {
   const defaults = seedFor('settings');
   const input = settings && typeof settings === 'object' ? settings : {};
@@ -76,6 +85,15 @@ function sanitize(settings) {
         caption: clean(entry?.caption, 140),
       }))
       .filter((entry) => entry.step >= 1 && entry.step <= 20 && entry.image),
+    /* Our Work: the reel that opens each industry, keyed by industry name. */
+    industryReels: (Array.isArray(input.industryReels) ? input.industryReels : [])
+      .slice(0, 40)
+      .map((entry) => ({
+        industry: clean(entry?.industry, 80),
+        video: cleanDriveId(entry?.video),
+        title: clean(entry?.title, 120),
+      }))
+      .filter((entry) => entry.industry && entry.video),
   };
 }
 
