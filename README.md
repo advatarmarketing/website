@@ -282,8 +282,9 @@ seconds after, so it never fights a swipe.
 
 - **Selected reels** — clients ticked *Featured*, as a drifting carousel (up to 12).
 - **By industry** — each industry lists its clients. Every client shows their **selected
-  reel** beside their name; pressing the client opens the rest of their reels as a small
-  drifting row. The selected reel is left out of that row, so it never shows twice.
+  reel** with their name under it, and the rest of their reels beside it as a small
+  drifting row, already showing. The selected reel is left out of that row, so it never
+  shows twice.
 - **Selected reel** (a field in each client's editor, under Manage clients) — a Google
   Drive link: one of their videos, or a separate upload shared as "Anyone with the link".
   Leave it blank and their first video is used. It also leads their Selected reels and

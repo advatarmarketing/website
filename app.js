@@ -762,33 +762,28 @@ async function renderOurWork() {
     : '<span class="result muted">Add your results in edit mode</span>';
 
   /*
-    One row per client: their selected reel, name and tagline. Pressing the
-    client opens the rest of their reels as a small drifting row, like the home
-    carousel — without the selected reel, so nothing shows twice.
+    One block per client: their selected reel with their name under it, and the
+    rest of their reels beside it as a small drifting row, like the home
+    carousel — already showing, and never including the selected reel, so
+    nothing appears twice.
   */
   const clientRow = (client) => {
     const { selected, rest } = clientReels(client);
-    const panelId = `client-${esc(client.id)}`;
-    const text = `
-      <span class="client-row-name">${esc(client.name)}</span>
-      ${client.tagline ? `<span class="tiny">${esc(client.tagline)}</span>` : ''}`;
     return `
-    <div class="client-row">
-      <div class="client-row-reel">
+    <div class="client-feature${rest.length ? '' : ' client-feature--solo'}">
+      <figure class="client-feature-lead">
         ${mediaTile({
           driveFileId: selected?.driveFileId,
           title: `${client.name} — ${selected?.title || 'selected reel'}`,
           empty: 'Reels coming soon',
         })}
-      </div>
-      ${rest.length
-        ? `<button type="button" class="client-row-head" data-toggle="${panelId}"
-                   aria-expanded="false" aria-controls="${panelId}">
-             <span class="client-row-text">${text}</span>
-             <span class="client-row-more"><span data-copy="work.client.more">More reels</span>${icon('chevronRight')}</span>
-           </button>
-           <div class="client-row-panel" id="${panelId}" hidden>${videoCarousel({ ...client, videos: rest })}</div>`
-        : `<div class="client-row-head"><span class="client-row-text">${text}</span></div>`}
+        <figcaption>
+          <span class="client-feature-label">${icon('film')}<span data-copy="work.client.selected">Selected reel</span></span>
+          <span class="client-feature-name">${esc(client.name)}</span>
+          ${client.tagline ? `<span class="tiny">${esc(client.tagline)}</span>` : ''}
+        </figcaption>
+      </figure>
+      ${rest.length ? `<div class="client-feature-reels">${videoCarousel({ ...client, videos: rest })}</div>` : ''}
     </div>`;
   };
 
