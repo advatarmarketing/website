@@ -1155,62 +1155,64 @@ video.hero-hand { height: auto; object-fit: contain; }
 }
 .industry-names li { font-size: 0.8125rem; color: var(--text-lo); }
 
-/* An industry's reels: one row, each card captioned with its client. */
-.video-card figcaption { display: grid; gap: 0.1rem; }
-.video-card-client {
-  font-family: var(--font-display);
-  font-size: 0.9375rem;
-  color: var(--text-hi);
-  letter-spacing: -0.01em;
-}
-.video-card figcaption .tiny { margin: 0; }
-/* Every client in the industry, listed under its reels. */
-.industry-roster {
-  margin-top: 1.5rem;
-  padding-top: 1.1rem;
+/*
+  One client: their selected reel beside their name. Pressing the client opens
+  the rest of their reels as a small drifting row under the name. The reel spans
+  both rows, so the row opens beside it rather than below it.
+*/
+.client-list { display: grid; grid-template-columns: minmax(0, 1fr); }
+.client-row {
+  display: grid;
+  grid-template-columns: minmax(0, 12rem) minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  column-gap: clamp(1rem, 3vw, 2rem);
+  align-items: start;
+  padding-block: 1.25rem;
   border-top: 1px solid var(--hairline-soft);
 }
-.industry-roster-label {
-  margin: 0 0 0.75rem;
-  font-size: 0.75rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--gold-text);
+.client-row:first-child { border-top: 0; padding-top: 0.25rem; }
+.client-row-reel { grid-row: 1 / span 2; min-width: 0; }
+.client-row-head {
+  grid-column: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.25rem 0 0;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
-.industry-roster ul {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
-  gap: 0.55rem 1.5rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.industry-roster li {
+button.client-row-head { cursor: pointer; }
+.client-row-text { display: grid; gap: 0.3rem; min-width: 0; }
+.client-row-text .tiny { margin: 0; }
+.client-row-name {
   font-family: var(--font-display);
-  font-size: 0.9375rem;
+  font-weight: 400;
+  font-size: 1.125rem;
   letter-spacing: -0.01em;
   color: var(--text-hi);
+  transition: color var(--mid) var(--ease);
 }
-.industry-roster li.is-quiet { color: var(--text-lo); }
-@media (max-width: 560px) {
-  .industry-roster ul { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem 1rem; }
-}
-
-/* The industry's feature reel, beside (or on phones, above) its clients. */
-.industry-lead { margin: 0; display: grid; gap: 0.75rem; align-content: start; }
-.industry-lead figcaption { display: grid; gap: 0.3rem; align-content: end; }
-.industry-lead-label {
+button.client-row-head:hover .client-row-name { color: var(--gold-text); }
+.client-row-more {
+  flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.5rem;
   font-size: 0.75rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+  white-space: nowrap;
   color: var(--gold-text);
 }
-.industry-lead-label .icon { width: 14px; height: 14px; }
-.industry-lead-title { font-family: var(--font-display); font-size: 1rem; color: var(--text-hi); }
-.industry-clients { min-width: 0; }
+.client-row-more .icon { width: 16px; height: 16px; transition: transform var(--mid) var(--ease); }
+.client-row-head[aria-expanded='true'] .client-row-more .icon { transform: rotate(90deg); }
+.client-row-panel { grid-column: 2; min-width: 0; padding-top: 1rem; }
+.client-row-panel[hidden] { display: none; }
 
 .tag-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
 .tag {
@@ -2534,16 +2536,12 @@ body[data-copy-editing='true'] [data-copy]:hover { outline-style: solid; }
   .industry-layout,
   .photo-layout { grid-template-columns: minmax(0, 1fr); }
   .photo-layout > .media { max-width: 15rem; }
-  /* On a phone the feature reel sits small, with its caption beside it —
-     never one big reel filling the screen. */
-  .industry-lead {
-    grid-template-columns: minmax(0, 42%) minmax(0, 1fr);
-    align-items: end;
-    gap: 1rem;
-    padding-bottom: 1.25rem;
-    border-bottom: 1px solid var(--hairline-soft);
-  }
-  .industry-layout { gap: 1.25rem; }
+  /* On a phone a client's reel sits small with their name beside it — never one
+     big reel filling the screen — and their other reels open full width below. */
+  .client-row { grid-template-columns: minmax(0, 42%) minmax(0, 1fr); grid-template-rows: auto auto; }
+  .client-row-reel { grid-row: 1; }
+  .client-row-head { flex-direction: column; justify-content: flex-end; align-self: end; gap: 0.75rem; padding: 0; }
+  .client-row-panel { grid-column: 1 / -1; padding-top: 1.1rem; }
 }
 
 @media (max-width: 560px) {

@@ -578,7 +578,7 @@ async function renderHome() {
   const winCard = (client, index) => `
     <article class="win-card" data-reveal style="--i:${index}">
       ${mediaTile({
-        driveFileId: client.videos?.[0]?.driveFileId,
+        driveFileId: clientReels(client).selected?.driveFileId,
         title: `${client.name} — reel`,
         empty: 'Video coming soon',
       })}
@@ -727,19 +727,23 @@ function industriesOf(clients) {
   return [...grouped].sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]));
 }
 
-const sameIndustry = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
-
 /**
- * The reel that opens an industry: the one chosen for it in edit mode, or, until
- * one is, the first client video in the group. Either way it is left out of the
- * client rows below it, so no reel shows twice.
+ * A client's selected reel and the rest of their videos. The selected reel is
+ * the one chosen in edit mode — one of their videos, or a separate Drive link —
+ * or else their first video. It is never in `rest`, so it never shows twice.
  */
-function industryLead(name, group, settings) {
-  const chosen = (settings.industryReels ?? []).find((entry) => sameIndustry(entry.industry, name));
-  if (chosen?.video) return { driveFileId: chosen.video, title: chosen.title || '' };
-  const client = group.find((item) => item.videos?.some((video) => video.driveFileId));
-  const video = client?.videos.find((item) => item.driveFileId);
-  return video ? { driveFileId: video.driveFileId, title: client.name } : null;
+function clientReels(client) {
+  const videos = (client.videos ?? []).filter((video) => video.driveFileId);
+  const chosen = client.selectedReel;
+  if (chosen) {
+    const match = videos.find((video) => video.driveFileId === chosen);
+    return {
+      selected: { driveFileId: chosen, title: match?.title || '' },
+      rest: videos.filter((video) => video.driveFileId !== chosen),
+    };
+  }
+  const [first, ...rest] = videos;
+  return { selected: first ?? null, rest };
 }
 
 async function renderOurWork() {
@@ -758,45 +762,37 @@ async function renderOurWork() {
     : '<span class="result muted">Add your results in edit mode</span>';
 
   /*
-    Every reel in an industry is on show at once — one small drifting row, like
-    the home carousel, each card named for its client — rather than behind a
-    button per client. The lead reel is left out, so nothing appears twice, and
-    clients with no reels yet are simply named underneath.
+    One row per client: their selected reel, name and tagline. Pressing the
+    client opens the rest of their reels as a small drifting row, like the home
+    carousel — without the selected reel, so nothing shows twice.
   */
-  const industryReels = (group, leadId) => {
-    const cards = group.flatMap((client) => (client.videos ?? [])
-      .filter((video) => video.driveFileId && video.driveFileId !== leadId)
-      .map((video) => ({ client, video })));
-    const hasReels = (client) => (client.videos ?? []).some((video) => video.driveFileId);
-    const row = cards.length
-      ? `<div class="carousel carousel--videos carousel--industry" data-carousel>
-           <div class="carousel-track" data-autoscroll="true">
-             ${cards.map(({ client, video }, index) => `
-               <figure class="video-card" style="--i:${index}">
-                 ${mediaTile({ driveFileId: video.driveFileId, title: `${client.name} — ${video.title || 'reel'}` })}
-                 <figcaption>
-                   <span class="video-card-client">${esc(client.name)}</span>
-                   ${video.title ? `<span class="tiny">${esc(video.title)}</span>` : ''}
-                 </figcaption>
-               </figure>`).join('')}
-           </div>
-         </div>`
-      : '';
-    // Every client in the industry, named underneath — those with no reels yet
-    // are simply a shade quieter.
-    const roster = `
-      <div class="industry-roster">
-        <p class="industry-roster-label" data-copy="work.industry.clients">Clients</p>
-        <ul>
-          ${group.map((client) => `<li${hasReels(client) ? '' : ' class="is-quiet"'}>${esc(client.name)}</li>`).join('')}
-        </ul>
-      </div>`;
-    return row + roster;
+  const clientRow = (client) => {
+    const { selected, rest } = clientReels(client);
+    const panelId = `client-${esc(client.id)}`;
+    const text = `
+      <span class="client-row-name">${esc(client.name)}</span>
+      ${client.tagline ? `<span class="tiny">${esc(client.tagline)}</span>` : ''}`;
+    return `
+    <div class="client-row">
+      <div class="client-row-reel">
+        ${mediaTile({
+          driveFileId: selected?.driveFileId,
+          title: `${client.name} — ${selected?.title || 'selected reel'}`,
+          empty: 'Reels coming soon',
+        })}
+      </div>
+      ${rest.length
+        ? `<button type="button" class="client-row-head" data-toggle="${panelId}"
+                   aria-expanded="false" aria-controls="${panelId}">
+             <span class="client-row-text">${text}</span>
+             <span class="client-row-more"><span data-copy="work.client.more">More reels</span>${icon('chevronRight')}</span>
+           </button>
+           <div class="client-row-panel" id="${panelId}" hidden>${videoCarousel({ ...client, videos: rest })}</div>`
+        : `<div class="client-row-head"><span class="client-row-text">${text}</span></div>`}
+    </div>`;
   };
 
-  const industryPanel = ([name, group], index) => {
-    const lead = industryLead(name, group, settings);
-    return `
+  const industryPanel = ([name, group], index) => `
     <div class="disclosure" data-reveal style="--i:${index}">
       <button type="button" class="disclosure-head" data-toggle="industry-${esc(name)}"
               aria-expanded="false" aria-controls="industry-${esc(name)}">
@@ -804,25 +800,11 @@ async function renderOurWork() {
         <span class="disclosure-meta">${icon('chevronRight')}</span>
       </button>
       <div class="disclosure-panel" id="industry-${esc(name)}" hidden>
-        ${group.length ? `
-        <div class="industry-layout">
-          <figure class="industry-lead">
-            ${mediaTile({
-              driveFileId: lead?.driveFileId,
-              title: `${name} — ${lead?.title || 'feature reel'}`,
-              empty: 'Feature reel coming soon',
-            })}
-            <figcaption>
-              <span class="industry-lead-label">${icon('film')}<span data-copy="work.industry.lead">Feature reel</span></span>
-              ${lead?.title ? `<span class="industry-lead-title">${esc(lead.title)}</span>` : ''}
-            </figcaption>
-          </figure>
-          <div class="industry-clients">${industryReels(group, lead?.driveFileId)}</div>
-        </div>`
-        : `<p class="tiny" style="padding-block:0.25rem 1.25rem">No clients in ${esc(name)} yet — add them in edit mode.</p>`}
+        ${group.length
+          ? `<div class="client-list">${group.map(clientRow).join('')}</div>`
+          : `<p class="tiny" style="padding-block:0.25rem 1.25rem">No clients in ${esc(name)} yet — add them in edit mode.</p>`}
       </div>
     </div>`;
-  };
 
   const photoCategory = (category, index) => `
     <div class="disclosure" data-reveal style="--i:${index}">
@@ -889,7 +871,7 @@ async function renderOurWork() {
                <div class="carousel-track" data-autoscroll="true">
                  ${featured.map((client, index) => `
                    <figure class="video-card" style="--i:${index}">
-                     ${mediaTile({ driveFileId: client.videos?.[0]?.driveFileId, title: `${client.name} — reel`, empty: 'Video coming soon' })}
+                     ${mediaTile({ driveFileId: clientReels(client).selected?.driveFileId, title: `${client.name} — reel`, empty: 'Video coming soon' })}
                      <figcaption class="tiny">${esc(client.tagline || client.name)}</figcaption>
                    </figure>`).join('')}
                </div>
@@ -906,9 +888,7 @@ async function renderOurWork() {
                   aria-expanded="false" aria-controls="all-clients">
             ${icon('layers')}<span data-copy="work.video.all-clients">View all client work</span>
           </button>
-          ${editOnly(`<button type="button" class="edit-chip" data-edit="clients">${icon('pencil')} Manage clients</button>
-            <button type="button" class="edit-chip" data-edit="industry-reels">${icon('film')} Feature reels</button>
-            <button type="button" class="edit-chip" data-edit="sync-clients">${icon('layers')} Sync clients</button>`)}
+          ${editOnly(`<button type="button" class="edit-chip" data-edit="clients">${icon('pencil')} Manage clients</button>            <button type="button" class="edit-chip" data-edit="sync-clients">${icon('layers')} Sync clients</button>`)}
         </div>
 
         <div class="disclosure-panel" id="industries" hidden style="margin-top:2rem">
@@ -2878,6 +2858,10 @@ const CLIENT_FIELDS = [
   { name: 'isRecentWin', label: 'Show in Recent Wins', type: 'checkbox' },
   { name: 'isCaseStudy', label: 'Show in Case studies', type: 'checkbox' },
   {
+    name: 'selectedReel', label: 'Selected reel', type: 'text',
+    hint: 'The reel shown for this client on Our Work — a Google Drive link, either one of their videos below or a separate upload. Leave blank to use their first video. It is left out of their carousel, so it never shows twice.',
+  },
+  {
     name: 'videos', label: 'Videos', type: 'rows',
     columns: [
       { key: 'title', label: 'Title' },
@@ -3016,7 +3000,6 @@ function mountEditHandlers() {
     }),
 
     'recent-wins': openRecentWinsEditor,
-    'industry-reels': openIndustryReelsEditor,
     submissions: openSubmissionsList,
     'sync-clients': openClientSync,
 
@@ -3036,72 +3019,6 @@ function mountEditHandlers() {
 
   $$('[data-edit]').forEach((button) => {
     button.addEventListener('click', () => handlers[button.dataset.edit]?.());
-  });
-}
-
-/**
- * The reel that opens each industry on Our Work. One Drive link per industry;
- * a blank one falls back to that industry's first client video.
- */
-function openIndustryReelsEditor() {
-  const names = industriesOf(state.clients ?? []).map(([name]) => name);
-  const current = state.settings?.industryReels ?? [];
-  const entryFor = (name) => current.find((entry) => sameIndustry(entry.industry, name)) ?? {};
-
-  openModal({
-    title: 'Feature reels',
-    subtitle: 'The reel that opens each industry. Upload the video to Google Drive, share it as "Anyone with the link", and paste the link here. Leave one blank to lead with that industry\'s first client video.',
-    body: `
-      <form class="editor-form" id="reels-form">
-        <div class="editor-grid">
-          ${names.map((name, index) => {
-            const entry = entryFor(name);
-            return `
-            <div class="field" data-industry="${esc(name)}">
-              <label for="reel-${index}">${esc(name)}</label>
-              <input id="reel-${index}" name="video" type="text" placeholder="Google Drive link"
-                     value="${esc(entry.video ? `https://drive.google.com/file/d/${entry.video}/view` : '')}">
-              <input name="title" type="text" placeholder="Caption (optional) — e.g. the client's name"
-                     aria-label="${esc(name)} caption" value="${esc(entry.title ?? '')}">
-            </div>`;
-          }).join('')}
-        </div>
-        <p class="form-status" role="status" aria-live="polite"></p>
-        <div class="editor-actions">
-          <button type="button" class="btn" data-close>Cancel</button>
-          <button type="submit" class="btn btn--gold">Save</button>
-        </div>
-      </form>`,
-    onMount(host) {
-      const form = $('#reels-form', host);
-      const status = $('.form-status', form);
-      form.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        status.dataset.state = '';
-        status.textContent = 'Saving…';
-        const edited = $$('[data-industry]', form).map((field) => ({
-          industry: field.dataset.industry,
-          video: $('[name="video"]', field).value.trim(),
-          title: $('[name="title"]', field).value.trim(),
-        })).filter((entry) => entry.video);
-        // Industries that no longer have clients keep their reel for when they return.
-        const kept = current.filter((entry) => !names.some((name) => sameIndustry(name, entry.industry)));
-        try {
-          const { settings } = await api.put('/api/settings', { industryReels: [...edited, ...kept] });
-          state.settings = settings;
-          const missing = edited.length - settings.industryReels.filter((entry) =>
-            edited.some((item) => sameIndustry(item.industry, entry.industry))).length;
-          closeModal();
-          toast(missing ? `Saved — ${missing} link${missing === 1 ? " wasn't a Drive link" : "s weren't Drive links"}.` : 'Feature reels saved.',
-            missing ? 'error' : undefined);
-          await renderRoute(window.location.pathname, { restoreScroll: true });
-        } catch (error) {
-          status.dataset.state = 'error';
-          status.textContent = error.message;
-          toast(error.message, 'error');
-        }
-      });
-    },
   });
 }
 

@@ -92,7 +92,7 @@ Once unlocked, small `edit` chips appear beside every editable region:
 | Page       | What you can edit                                                    |
 |------------|----------------------------------------------------------------------|
 | Home       | Hero video / poster / hand asset URLs; light + dark logos; background texture; which clients are Recent Wins |
-| Our Work   | Clients (videos, category, notes, case-study flag), each industry's feature reel, websites, photography, branding, results |
+| Our Work   | Clients (videos, category, notes, case-study flag), each client's selected reel, websites, photography, branding, results |
 | About      | Founded / clients / team numbers — these feed the copy directly       |
 | Contact    | WhatsApp number, email; read and delete contact submissions           |
 | We're Hiring | Behind-the-scenes gallery; add/edit/delete vacancies                |
@@ -281,13 +281,13 @@ seconds after, so it never fights a swipe.
 ### Our Work reels
 
 - **Selected reels** — clients ticked *Featured*, as a drifting carousel (up to 12).
-- **By industry** — each industry opens on its **feature reel**, then every other reel in
-  that industry in one small drifting row, each card named for its client. Every client in
-  the industry is listed underneath (those with no reels yet a shade quieter). No reel
-  appears twice.
-- **Feature reels** (edit chip beside Manage clients) — one Google Drive link per industry.
-  Upload the video to Drive, share it as "Anyone with the link", paste the link. Leave one
-  blank and that industry leads with its first client video instead.
+- **By industry** — each industry lists its clients. Every client shows their **selected
+  reel** beside their name; pressing the client opens the rest of their reels as a small
+  drifting row. The selected reel is left out of that row, so it never shows twice.
+- **Selected reel** (a field in each client's editor, under Manage clients) — a Google
+  Drive link: one of their videos, or a separate upload shared as "Anyone with the link".
+  Leave it blank and their first video is used. It also leads their Selected reels and
+  Recent Wins cards.
 
 ## Not built
 

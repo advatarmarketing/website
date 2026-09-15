@@ -30,6 +30,9 @@ export default collectionRoute({
       category: clean(client.category, 80) || 'Uncategorised',
       logoUrl: cleanUrl(client.logoUrl),
       tagline: clean(client.tagline, 200),
+      // The reel that represents this client on Our Work: one of their videos or
+      // a separate upload. Empty means their first video. Stored as a Drive id.
+      selectedReel: cleanDriveId(client.selectedReel),
       videos: (Array.isArray(client.videos) ? client.videos : [])
         .slice(0, 60)
         .map(sanitizeVideo)
