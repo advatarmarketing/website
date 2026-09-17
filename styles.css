@@ -2559,28 +2559,31 @@ body[data-copy-editing='true'] [data-copy]:hover { outline-style: solid; }
   /* The film's own opening colour, so the first paint already matches it. */
   background-color: #E2E2E2;
   cursor: pointer;
-  /* The four corners of the current frame, kept up to date by app.js. */
-  --wash-tl: #E2E2E2;
-  --wash-tr: #E2E2E2;
-  --wash-bl: #E2E2E2;
-  --wash-br: #E2E2E2;
 }
 html[data-loading] .loader { display: block; }
 html[data-loading] { overflow: hidden; }
 
 /*
-  Two flat gradients, the lower one fading in over the upper: between them they
-  blend all four corner colours across the screen. While the film's background
-  is one flat colour — which is nearly all of it — every corner matches and the
-  wash is that same colour exactly.
+  The film's own edges, stretched out to the sides of the screen — see the
+  script in index.html. Painted at a quarter resolution and scaled back up here,
+  which is all the detail a field of stretched edges can carry anyway.
 */
-.loader-wash { position: absolute; inset: 0; }
-.loader-wash > span { position: absolute; inset: 0; display: block; }
-.loader-wash-upper { background: linear-gradient(to right, var(--wash-tl), var(--wash-tr)); }
-.loader-wash-lower {
-  background: linear-gradient(to right, var(--wash-bl), var(--wash-br));
-  -webkit-mask-image: linear-gradient(to bottom, transparent, #000);
-  mask-image: linear-gradient(to bottom, transparent, #000);
+.loader-wash {
+  position: absolute;
+  inset: -8%;
+  display: block;
+  width: 116%;
+  height: 116%;
+  /*
+    Blurred, for two reasons. A quarter-resolution canvas stretched back up has
+    visible steps in it, and stretching the picture's edges outwards turns a
+    diagonal into stripes — both of which read as background once they are soft.
+    The radius stays well short of the wordmark, which sits a quarter of the
+    frame in from the nearest edge, so nothing of the logo bleeds out past the
+    film. The canvas runs 8% past the screen on every side so the blur has real
+    pixels to reach for rather than pulling in transparency at the edges.
+  */
+  filter: blur(clamp(14px, 3vw, 34px));
 }
 
 /*

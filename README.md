@@ -203,11 +203,19 @@ the nav, landing exactly on the logo, while the backdrop fades away to reveal th
   2560px screen it was being upscaled twice over. At the cap it is served at or below its
   real resolution on every display, so it stays sharp.
 - **The wash carries its background out to the edges.** Since the film no longer fills the
-  screen, the four corners of each frame are read out of a 16×9 thumbnail of it (in
-  `index.html`, so it is already tracking before the wipe from light to dark arrives) and
-  blended across the screen behind it. Through the flat stretches — nearly all of the film —
-  every corner is the same colour and the match is exact; the two wash layers blend all four
-  during the diagonal wipe. The skip button flips to dark-on-light over the opening.
+  screen, a canvas behind it takes the picture's own outermost row and column and stretches
+  them outwards, so the colour beside the film is the colour of the film's edge at that exact
+  point, the whole way round. Through the flat stretches — nearly all of the film — the match
+  is exact: measured across the join at one to three levels out of 255. Blending the four
+  corners instead was the first attempt and it does not work, because a smooth gradient
+  beside the hard diagonal of the light-to-dark wipe is precisely where the box shows.
+
+  The canvas is quarter-resolution, blurred, and runs 8% past the screen on every side so the
+  blur has real pixels to reach for. The blur is what makes stretched edges read as
+  background rather than as stripes, and its radius stays well short of the wordmark, which
+  sits a quarter of the frame in from the nearest edge — so none of the logo bleeds out past
+  the film. It is painted in `index.html` rather than `app.js` so it is already tracking
+  before the wipe arrives. The skip button flips to dark-on-light over the opening.
 - The film was cut down twice from the supplied 10s master. The wordmark lands at 2.7s and
   then creeps imperceptibly smaller for another 2.7 seconds, which just read as a wait, so
   the tail is gone. A watermark in the bottom-right corner was painted out with ffmpeg's

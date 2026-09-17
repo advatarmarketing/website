@@ -59,14 +59,11 @@
   <!--
     The wash carries the film's own background out to the edges of the screen,
     so the film can be shown small — at its real resolution, rather than blown
-    up and soft — without sitting in a box. app.js reads the colour out of the
-    four corners of each frame; the two layers blend them, the lower one showing
-    through a vertical fade, which is the film's diagonal wipe as it happens.
+    up and soft — without sitting in a box on the page. The script below paints
+    it by stretching the picture's own outermost row and column outwards, so the
+    colour beside the film is the colour at the film's edge the whole way round.
   -->
-  <div class="loader-wash">
-    <span class="loader-wash-upper"></span>
-    <span class="loader-wash-lower"></span>
-  </div>
+  <canvas class="loader-wash" aria-hidden="true"></canvas>
   <video class="loader-video" src="/assets/loader.mp4" muted playsinline preload="none"></video>
   <button type="button" class="loader-skip" tabindex="-1">Skip</button>
 </div>
@@ -80,40 +77,71 @@
     if (started && started.catch) started.catch(function () { /* app.js handles it */ });
 
     /*
-      Carry the film's background out to the edges of the screen. Each frame is
-      drawn into a 16x9 thumbnail of itself and its four corners handed to CSS,
-      which blends them across the wash. That size costs nothing to read and is
-      coarse enough that the wordmark never reaches a corner, so the wash only
-      ever picks up background. Sampled here rather than in app.js so it is
-      already tracking by the time the wipe from light to dark arrives.
-    */
-    var canvas = document.createElement('canvas');
-    canvas.width = 16; canvas.height = 9;
-    var ctx = canvas.getContext && canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return;
-    var corners = [['tl', 0, 0], ['tr', 15, 0], ['bl', 0, 8], ['br', 15, 8]];
+      Carry the film's background out to the edges of the screen, so that a film
+      shown at its own size doesn't sit in a visible box.
 
-    function sample() {
+      The picture is drawn where it actually is, then its outermost column is
+      stretched out to the left and right and its outermost row up and down. The
+      colour immediately beside the film is therefore the colour of the film's
+      own edge at that exact point, all the way round — which is what it takes
+      to follow the diagonal wipe from light to dark. Averaging the corners
+      instead gives a smooth gradient, and a smooth gradient beside a hard
+      diagonal edge is precisely where the box shows.
+
+      The canvas is a quarter-resolution and stretched by CSS: everything in it
+      is a soft field, and a full-size one per frame would cost real work on a
+      phone. Painted here rather than in app.js so it is already tracking by the
+      time the wipe arrives.
+    */
+    var wash = document.querySelector('.loader-wash');
+    var ctx = wash && wash.getContext && wash.getContext('2d');
+    if (!ctx) return;
+    var SCALE = 4;        // one wash pixel per four on screen
+    var BLEED = 0.08;     // and it runs past the screen, so the blur has pixels to find
+
+    function paint() {
       if (!loader.isConnected) return;
-      if (film.readyState >= 2) {
+      if (film.readyState >= 2 && film.videoWidth) {
         try {
-          ctx.drawImage(film, 0, 0, 16, 9);
-          var px = ctx.getImageData(0, 0, 16, 9).data;
-          var light = 0;
-          for (var i = 0; i < corners.length; i++) {
-            var j = (corners[i][2] * 16 + corners[i][1]) * 4;
-            loader.style.setProperty('--wash-' + corners[i][0],
-              'rgb(' + px[j] + ',' + px[j + 1] + ',' + px[j + 2] + ')');
-            light += px[j] + px[j + 1] + px[j + 2];
-          }
+          var vw = loader.clientWidth;
+          var vh = loader.clientHeight;
+          var padX = vw * BLEED;
+          var padY = vh * BLEED;
+          var W = Math.max(2, Math.ceil((vw + padX * 2) / SCALE));
+          var H = Math.max(2, Math.ceil((vh + padY * 2) / SCALE));
+          if (wash.width !== W || wash.height !== H) { wash.width = W; wash.height = H; }
+
+          // Where the picture really is: object-fit: contain, so it may sit
+          // inside its own box with a margin of its own.
+          var box = film.getBoundingClientRect();
+          var k = Math.min(box.width / film.videoWidth, box.height / film.videoHeight);
+          var fw = film.videoWidth * k / SCALE;
+          var fh = film.videoHeight * k / SCALE;
+          var fx = (box.left + (box.width - film.videoWidth * k) / 2 + padX) / SCALE;
+          var fy = (box.top + (box.height - film.videoHeight * k) / 2 + padY) / SCALE;
+
+          ctx.imageSmoothingEnabled = true;
+          ctx.drawImage(film, fx, fy, fw, fh);
+
+          // Sides first, then the full-width rows above and below them, which
+          // takes the corners with it.
+          var edge = 1;
+          var right = fx + fw;
+          var bottom = fy + fh;
+          if (fx > 0) ctx.drawImage(wash, fx, fy, edge, fh, 0, fy, fx, fh);
+          if (right < W) ctx.drawImage(wash, right - edge, fy, edge, fh, right, fy, W - right, fh);
+          if (fy > 0) ctx.drawImage(wash, 0, fy, W, edge, 0, 0, W, fy);
+          if (bottom < H) ctx.drawImage(wash, 0, bottom - edge, W, edge, 0, bottom, W, H - bottom);
+
           // The skip button has to stay legible over both ends of the film.
-          loader.setAttribute('data-wash', light / 12 > 140 ? 'light' : 'dark');
+          var foot = ctx.getImageData(W >> 1, H - 1, 1, 1).data;
+          loader.setAttribute('data-wash', (foot[0] + foot[1] + foot[2]) / 3 > 140 ? 'light' : 'dark');
         } catch (e) { return; }   // never hold the intro up over a canvas
       }
-      if (film.requestVideoFrameCallback) film.requestVideoFrameCallback(sample);
-      else requestAnimationFrame(sample);
+      if (film.requestVideoFrameCallback) film.requestVideoFrameCallback(paint);
+      else requestAnimationFrame(paint);
     }
-    sample();
+    paint();
   })();
 </script>
 
