@@ -265,9 +265,16 @@ that isn't still shows as a play tile.
 
 **Players are rationed.** Every Drive embed is a whole web page, and a phone reloads the tab
 once it holds too many — which is what made the site "refresh" mid-scroll. So a player only
-loads once its tile has been in view for a moment, and no more than 4 (phones) or 10
+loads once its tile has been in view for a moment, and no more than 3 (phones) or 10
 (desktop) are ever live at once; past that, the oldest one nobody is watching gives its
 place up. Posters use a small thumbnail for the same reason.
+
+**Posters are recycled.** Rationing the players was not enough on its own. Our Work holds
+over a hundred tiles, and a poster costs a couple of megabytes of memory once it has been
+on screen, so reading the page left a few hundred megabytes of decoded image behind it and
+the phone dropped the tab anyway. A tile more than a screen and a half away now hands its
+posters back and picks them up again on the way in, which holds the whole page flat at
+about 30MB however far you scroll. Tiles are sized by aspect-ratio, so nothing moves.
 
 **Drive's viewing limit.** Google Drive caps how often viewers who aren't signed in can
 load its player, per network. Once a network hits it, every player shows "Sign in to your
@@ -275,8 +282,13 @@ Google Account to continue to play this video" until the limit resets. That's wh
 are kept once loaded rather than reloaded each time they scroll back into view. Drive isn't
 a video host, though: if the site gets real traffic, move the reels to a proper one.
 
-On touch screens a carousel's drift holds while a finger is on it and for a couple of
-seconds after, so it never fights a swipe.
+**Only the row you're looking at moves.** A carousel drifts sideways on a frame loop, and
+Our Work opens dozens of them at once — enough, on a phone, to make the page stutter on its
+own. A row off screen stops its loop entirely. A row you have put a finger on stops too,
+and stays stopped until you scroll away from it and back: resuming after a couple of
+seconds meant the reel you had just pressed play on slid off the side while you watched it,
+and on a phone a finger lands on these rows constantly, since they sit right in the path of
+scrolling down the page.
 
 ### Our Work reels
 

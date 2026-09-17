@@ -1695,7 +1695,7 @@ const frameSizer = 'ResizeObserver' in window
   limits how often viewers who aren't signed in can load its player, so reloading
   a video every time it drifts back into view would use that allowance up fast.
 */
-const LIVE_LIMIT = window.matchMedia('(hover: none), (max-width: 720px)').matches ? 4 : 10;
+const LIVE_LIMIT = window.matchMedia('(hover: none), (max-width: 720px)').matches ? 3 : 10;
 const livePlayers = new Set();          // tiles holding a player, oldest first
 const tileTimers = new WeakMap();
 
@@ -1772,18 +1772,68 @@ function forgetVideo(tile) {
   releaseVideo(tile);
 }
 
+/*
+  Posters are recycled the same way. A poster decodes to a couple of megabytes
+  once it is on screen, and Our Work holds well over a hundred tiles, so reading
+  the whole page would leave a few hundred megabytes of decoded image behind it.
+  That is what makes a phone throw the tab away and reload the site underneath
+  you. So a tile far from the viewport hands its posters back and takes them up
+  again as it returns. The tile never changes shape: the box is sized by
+  aspect-ratio, not by the picture inside it.
+*/
+function dropPosters(tile) {
+  tile.querySelectorAll('img[src]').forEach((img) => {
+    img.dataset.src = img.getAttribute('src');
+    img.removeAttribute('src');
+  });
+}
+
+function restorePosters(tile) {
+  const waiting = tile.querySelectorAll('img[data-src]');
+  if (!waiting.length) return;
+  tile.classList.remove('media--thumb-failed');
+  waiting.forEach((img) => {
+    img.setAttribute('src', img.dataset.src);
+    delete img.dataset.src;
+  });
+}
+
+/*
+  A screen and a half of slack, so a poster is long since loaded by the time it
+  is reached and only let go of well out of sight. The margin can't reach inside
+  a carousel: a card hidden by the row's own overflow reads as out of view
+  whatever the margin says. Those come back as they reach the edge, which at a
+  drift of 14px a second is in hand well before there is enough of the card
+  showing to notice.
+*/
+const posterObserver = 'IntersectionObserver' in window
+  ? new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) restorePosters(entry.target);
+        else dropPosters(entry.target);
+      }
+    }, { rootMargin: '150% 100%' })
+  : null;
+
+function watchPosters(tile) { posterObserver?.observe(tile); }
+function forgetPosters(tile) { posterObserver?.unobserve(tile); }
+
+const eachTile = (node, selector, fn) => {
+  if (node.nodeType !== 1) return;
+  if (node.matches(selector)) fn(node);
+  node.querySelectorAll(selector).forEach(fn);
+};
+
 new MutationObserver((records) => {
   for (const record of records) {
     for (const node of record.addedNodes) {
-      if (node.nodeType !== 1) continue;
-      if (node.matches('.media--video')) watchVideo(node);
-      node.querySelectorAll('.media--video').forEach(watchVideo);
+      eachTile(node, '.media--video', watchVideo);
+      eachTile(node, '.media', watchPosters);
     }
     // Tiles that have left the page give up their players and their slots.
     for (const node of record.removedNodes) {
-      if (node.nodeType !== 1) continue;
-      if (node.matches('.media--video')) forgetVideo(node);
-      node.querySelectorAll('.media--video').forEach(forgetVideo);
+      eachTile(node, '.media--video', forgetVideo);
+      eachTile(node, '.media', forgetPosters);
     }
   }
 }).observe(document.body, { childList: true, subtree: true });
@@ -1823,9 +1873,11 @@ document.addEventListener('load', (event) => {
 
 document.addEventListener('error', (event) => {
   const img = event.target;
-  if (img instanceof HTMLImageElement && img.classList.contains('media-thumb')) {
-    img.closest('.media--video')?.classList.add('media--thumb-failed');
-  }
+  if (!(img instanceof HTMLImageElement) || !img.classList.contains('media-thumb')) return;
+  // Handing a poster back fires this too, since the browser treats a removed
+  // src as an image that failed. That one isn't a failure — it's on its way out.
+  if (!img.hasAttribute('src')) return;
+  img.closest('.media--video')?.classList.add('media--thumb-failed');
 }, true);
 
 /* --------------------------------------------------- Chrome behaviours --- */
@@ -2039,7 +2091,16 @@ function mountCarousel(root) {
   }
   root.dataset.looping = String(looping);
 
-  const loopWidth = () => track.scrollWidth / 2;
+  /*
+    How far the row travels before it is back where it started: the distance
+    from the first item to its own clone. scrollWidth/2 looks like the same
+    thing but is half a gap out, so every loop nudged the row sideways.
+  */
+  const loopWidth = () => {
+    const kids = track.children;
+    const clone = kids[kids.length / 2];
+    return clone ? clone.offsetLeft - kids[0].offsetLeft : track.scrollWidth / 2;
+  };
 
   const updateEnd = () => {
     // With a seamless loop there is no "end" to fade against.
@@ -2063,22 +2124,47 @@ function mountCarousel(root) {
     // Sub-pixel carry, or a 14px/s speed would floor to zero every frame.
     let carry = 0;
     /*
-      A finger on the row, or its momentum still carrying it, holds the drift —
-      otherwise the drift writes scrollLeft every frame and fights the swipe.
-      Any scroll the drift didn't make is someone scrolling.
+      A scroll the drift didn't make is someone scrolling the row themselves —
+      a wheel, a trackpad, the keyboard. Hold off for a moment, or the drift
+      writes scrollLeft every frame and fights them for it.
     */
     let holdUntil = 0;
     let expected = track.scrollLeft;
     const holdFor = (ms) => { holdUntil = performance.now() + ms; };
-    track.addEventListener('touchstart', () => holdFor(60000), { passive: true });
-    track.addEventListener('touchend', () => holdFor(2500), { passive: true });
-    track.addEventListener('touchcancel', () => holdFor(2500), { passive: true });
     track.addEventListener('scroll', () => {
       if (Math.abs(track.scrollLeft - expected) > 2 && holdUntil < performance.now() + 2500) holdFor(2500);
     }, { passive: true });
 
+    /*
+      A row you have put a finger on stops, and stays stopped until you have
+      scrolled away from it. Resuming after a couple of seconds meant the video
+      you had just pressed play on quietly slid off the side while you watched
+      it — and on a phone a finger lands on these rows constantly, because they
+      sit right in the path of scrolling down the page.
+    */
+    let touched = false;
+    const holdRow = () => { touched = true; };
+    track.addEventListener('touchstart', holdRow, { passive: true });
+    track.addEventListener('touchmove', holdRow, { passive: true });
+
+    /*
+      Only the row you are looking at moves. Our Work opens dozens of these at
+      once, and a frame loop per row, each writing scrollLeft and forcing a
+      layout, is enough on its own to make a phone stutter and run out of room.
+      Leaving a row also clears its hold, so it drifts again next time round.
+    */
+    let onScreen = true;
+    const rowWatcher = 'IntersectionObserver' in window
+      ? new IntersectionObserver(([entry]) => {
+          onScreen = entry.isIntersecting;
+          if (!onScreen) { touched = false; return; }
+          if (!frame) { last = performance.now(); frame = requestAnimationFrame(tick); }
+        }, { rootMargin: '20% 0px' })
+      : null;
+
     const tick = (now) => {
       if (!track.isConnected) return;   // its modal closed, or the page changed
+      if (!onScreen) { frame = 0; return; }
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
 
@@ -2086,7 +2172,8 @@ function mountCarousel(root) {
       // players holds the drift, so a video never slides away mid-watch. Hover
       // only counts for a real mouse: a phone keeps :hover stuck on whatever
       // was last tapped, which would freeze the row for good.
-      const watching = (canHover && track.matches(':hover'))
+      const watching = touched
+        || (canHover && track.matches(':hover'))
         || (document.activeElement?.tagName === 'IFRAME' && track.contains(document.activeElement))
         || Boolean(track.querySelector('.media--video[data-engaged="true"]'));
       if (!paused && !watching && !track.dataset.dragging && now >= holdUntil) {
@@ -2102,10 +2189,15 @@ function mountCarousel(root) {
       expected = track.scrollLeft;
       frame = requestAnimationFrame(tick);
     };
-    frame = requestAnimationFrame(tick);
+    if (rowWatcher) rowWatcher.observe(root);
+    else frame = requestAnimationFrame(tick);
 
     const pause = () => { paused = true; };
-    const resume = () => { last = performance.now(); paused = false; };
+    const resume = () => {
+      last = performance.now();
+      paused = false;
+      if (onScreen && !frame) frame = requestAnimationFrame(tick);
+    };
 
     // Stop while someone is reading, interacting, or the tab is hidden.
     track.addEventListener('pointerenter', pause);
@@ -2118,6 +2210,7 @@ function mountCarousel(root) {
 
     registerCleanup(() => {
       cancelAnimationFrame(frame);
+      rowWatcher?.disconnect();
       document.removeEventListener('visibilitychange', onVisibility);
     });
   }
