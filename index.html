@@ -56,16 +56,64 @@
   app.js. Click, tap, Escape, Enter or Space skips it.
 -->
 <div class="loader" aria-hidden="true">
+  <!--
+    The wash carries the film's own background out to the edges of the screen,
+    so the film can be shown small — at its real resolution, rather than blown
+    up and soft — without sitting in a box. app.js reads the colour out of the
+    four corners of each frame; the two layers blend them, the lower one showing
+    through a vertical fade, which is the film's diagonal wipe as it happens.
+  -->
+  <div class="loader-wash">
+    <span class="loader-wash-upper"></span>
+    <span class="loader-wash-lower"></span>
+  </div>
   <video class="loader-video" src="/assets/loader.mp4" muted playsinline preload="none"></video>
   <button type="button" class="loader-skip" tabindex="-1">Skip</button>
 </div>
 <script>
   (function () {
     if (!document.documentElement.hasAttribute('data-loading')) return;
+    var loader = document.querySelector('.loader');
     var film = document.querySelector('.loader-video');
     film.preload = 'auto';
     var started = film.play();
     if (started && started.catch) started.catch(function () { /* app.js handles it */ });
+
+    /*
+      Carry the film's background out to the edges of the screen. Each frame is
+      drawn into a 16x9 thumbnail of itself and its four corners handed to CSS,
+      which blends them across the wash. That size costs nothing to read and is
+      coarse enough that the wordmark never reaches a corner, so the wash only
+      ever picks up background. Sampled here rather than in app.js so it is
+      already tracking by the time the wipe from light to dark arrives.
+    */
+    var canvas = document.createElement('canvas');
+    canvas.width = 16; canvas.height = 9;
+    var ctx = canvas.getContext && canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+    var corners = [['tl', 0, 0], ['tr', 15, 0], ['bl', 0, 8], ['br', 15, 8]];
+
+    function sample() {
+      if (!loader.isConnected) return;
+      if (film.readyState >= 2) {
+        try {
+          ctx.drawImage(film, 0, 0, 16, 9);
+          var px = ctx.getImageData(0, 0, 16, 9).data;
+          var light = 0;
+          for (var i = 0; i < corners.length; i++) {
+            var j = (corners[i][2] * 16 + corners[i][1]) * 4;
+            loader.style.setProperty('--wash-' + corners[i][0],
+              'rgb(' + px[j] + ',' + px[j + 1] + ',' + px[j + 2] + ')');
+            light += px[j] + px[j + 1] + px[j + 2];
+          }
+          // The skip button has to stay legible over both ends of the film.
+          loader.setAttribute('data-wash', light / 12 > 140 ? 'light' : 'dark');
+        } catch (e) { return; }   // never hold the intro up over a canvas
+      }
+      if (film.requestVideoFrameCallback) film.requestVideoFrameCallback(sample);
+      else requestAnimationFrame(sample);
+    }
+    sample();
   })();
 </script>
 

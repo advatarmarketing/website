@@ -128,6 +128,38 @@ an image URL **or a Google Drive link**, then an optional caption — e.g.
 the file id and shown through Drive's thumbnail service, so the file must be shared as
 "Anyone with the link". Steps without an image show a placeholder.
 
+### Images (Cloudinary)
+
+Every image field on the site takes a plain URL, so a Cloudinary delivery URL copied
+straight out of the media library can be pasted in as-is. Nothing needs configuring: there
+is no account, key or SDK involved, because Cloudinary URLs are public and are only ever
+read.
+
+Cloudinary is also asked to do the work of sizing them. A URL out of the media library
+points at the **original** upload, which is usually several thousand pixels wide — slow to
+fetch, and heavy for a phone to hold, on a page like Our Work that shows a hundred pictures.
+So `assetUrl` in `app.js` inserts a transformation on the way out:
+
+```
+pasted   https://res.cloudinary.com/advatar/image/upload/v1712/site/team.jpg
+served   https://res.cloudinary.com/advatar/image/upload/f_auto,q_auto,c_limit,w_900/v1712/site/team.jpg
+```
+
+- `f_auto` serves AVIF or WebP to browsers that take them, JPEG to the rest.
+- `q_auto` picks a quality that holds up for that particular picture.
+- `c_limit,w_N` caps the width. It only ever scales **down**, so a small image is untouched.
+  The cap follows where the picture is used: 1920 for the hero and the background texture,
+  1600 for Look Inside, 1400 for wide tiles, 900 for square and portrait tiles, 600 for a
+  logo. Cloudinary video URLs get `f_auto,q_auto` and keep their own dimensions.
+
+What is **stored** is always the URL exactly as pasted — the transformation is added when
+the page is rendered, so changing a cap here changes every image at once and nothing has to
+be re-entered.
+
+A URL that already carries its own transformations (`.../upload/w_400,c_fill/...`) is
+somebody being deliberate and is left exactly as pasted. Ordinary image links from anywhere
+else, and Google Drive ids, work exactly as they did before.
+
 ## Environment variables
 
 | Variable | Required | Purpose |
@@ -158,18 +190,31 @@ changes. It shows once per browser; add `?hint=1` to any URL to show it again.
 
 ## Intro film and logo
 
-A fresh load of the **homepage** opens on the intro film (`assets/loader.mp4`, 5.4s, silent).
+A fresh load of the **homepage** opens on the intro film (`assets/loader.mp4`, 3.1s, silent).
 When it ends on the Advatar wordmark, the wordmark flies from the centre of the screen into
-the nav, landing exactly on the logo, while the black backdrop fades away to reveal the page.
+the nav, landing exactly on the logo, while the backdrop fades away to reveal the page.
 
 - Click, tap, **Escape**, **Enter** or **Space** skips straight to the flight.
 - It never plays on other pages, for `prefers-reduced-motion`, or with `?loader=0`. If the
   film can't load or play, the page is released at once, and a 15-second failsafe in
   `index.html` covers the case where `app.js` never runs.
-- The film was trimmed from the supplied 10s cut: the wordmark is fully settled at 5.4s, and
-  the rest was a static hold.
+- **The film is shown at its own size**, capped at 720px wide, not stretched across the
+  screen. It is a 1280×720 master: blown up to a desktop display it went soft, and on a
+  2560px screen it was being upscaled twice over. At the cap it is served at or below its
+  real resolution on every display, so it stays sharp.
+- **The wash carries its background out to the edges.** Since the film no longer fills the
+  screen, the four corners of each frame are read out of a 16×9 thumbnail of it (in
+  `index.html`, so it is already tracking before the wipe from light to dark arrives) and
+  blended across the screen behind it. Through the flat stretches — nearly all of the film —
+  every corner is the same colour and the match is exact; the two wash layers blend all four
+  during the diagonal wipe. The skip button flips to dark-on-light over the opening.
+- The film was cut down twice from the supplied 10s master. The wordmark lands at 2.7s and
+  then creeps imperceptibly smaller for another 2.7 seconds, which just read as a wait, so
+  the tail is gone. A watermark in the bottom-right corner was painted out with ffmpeg's
+  `delogo` at the same time.
 - The flight is measured against the film's frame. `FILM_MARK` in `app.js` is the wordmark's
-  position in the 1280×720 frame, so if the film is ever replaced, re-measure it there.
+  position in the 1280×720 frame, so if the film is ever replaced, re-measure it there — the
+  flyer is checked to land on the film's own wordmark to within a pixel.
 
 The logos are `assets/logo-dark.png` (white, for dark mode) and `assets/logo-light.png`
 (black, for light mode), cropped tight from the supplied artwork on a transparent

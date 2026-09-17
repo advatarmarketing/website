@@ -2556,16 +2556,46 @@ body[data-copy-editing='true'] [data-copy]:hover { outline-style: solid; }
   inset: 0;
   z-index: 300;
   display: none;
-  background-color: #171717;
+  /* The film's own opening colour, so the first paint already matches it. */
+  background-color: #E2E2E2;
   cursor: pointer;
+  /* The four corners of the current frame, kept up to date by app.js. */
+  --wash-tl: #E2E2E2;
+  --wash-tr: #E2E2E2;
+  --wash-bl: #E2E2E2;
+  --wash-br: #E2E2E2;
 }
 html[data-loading] .loader { display: block; }
 html[data-loading] { overflow: hidden; }
 
+/*
+  Two flat gradients, the lower one fading in over the upper: between them they
+  blend all four corner colours across the screen. While the film's background
+  is one flat colour — which is nearly all of it — every corner matches and the
+  wash is that same colour exactly.
+*/
+.loader-wash { position: absolute; inset: 0; }
+.loader-wash > span { position: absolute; inset: 0; display: block; }
+.loader-wash-upper { background: linear-gradient(to right, var(--wash-tl), var(--wash-tr)); }
+.loader-wash-lower {
+  background: linear-gradient(to right, var(--wash-bl), var(--wash-br));
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000);
+  mask-image: linear-gradient(to bottom, transparent, #000);
+}
+
+/*
+  Shown at its own size rather than stretched over the whole screen: the film is
+  1280 wide, and blown up to a desktop display it went soft. The wash behind it
+  carries its background out to the edges, so it still reads as full screen.
+*/
 .loader-video {
-  display: block;
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(90vw, 720px);
+  height: auto;
+  max-height: 78vh;
   object-fit: contain;
   transition: opacity 260ms var(--ease);
 }
@@ -2573,6 +2603,10 @@ html[data-loading] { overflow: hidden; }
   background-color: transparent;
   transition: background-color 900ms var(--ease);
   pointer-events: none;
+}
+.loader--lifting .loader-wash {
+  opacity: 0;
+  transition: opacity 900ms var(--ease);
 }
 
 .loader-skip {
@@ -2593,6 +2627,14 @@ html[data-loading] { overflow: hidden; }
   transition: opacity 260ms var(--ease), color var(--mid) var(--ease);
 }
 .loader-skip:hover { color: #F5F1E8; }
+/* The film opens on a light background and ends on a dark one; the skip button
+   follows it, or it would be invisible over one of them. */
+.loader[data-wash='light'] .loader-skip {
+  border-color: rgba(0, 0, 0, 0.16);
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(23, 23, 23, 0.66);
+}
+.loader[data-wash='light'] .loader-skip:hover { color: #171717; }
 .loader--lifting .loader-skip { opacity: 0; }
 
 .loader-flyer {

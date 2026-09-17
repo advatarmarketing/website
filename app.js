@@ -22,6 +22,39 @@ function safeUrl(value) {
   return '';
 }
 
+/*
+  Cloudinary. Paste a delivery URL straight out of the media library into any
+  image or video field and it is served fit for the web: Cloudinary resizes and
+  re-encodes on the way out if you ask it to, so f_auto,q_auto and a width cap
+  are inserted here. Without that, the URL points at the original upload — often
+  several thousand pixels wide — which is slow to fetch and heavy for a phone to
+  hold, and Our Work shows over a hundred pictures at once.
+
+  c_limit only ever scales down, never up. A URL that already carries its own
+  transformations is somebody being deliberate, and is left exactly as pasted.
+  Anything that isn't a Cloudinary URL passes straight through, so ordinary
+  image links and Drive ids work as they always did.
+*/
+const CLOUDINARY = /^(https:\/\/res\.cloudinary\.com\/[^/]+\/(image|video)\/(?:upload|fetch|private|authenticated))\/(.+)$/i;
+const CLOUDINARY_TRANSFORM = /^[a-z]{1,3}_[^/]+(?:,[a-z]{1,3}_[^/]+)*\//i;
+
+function cloudinaryFit(url, width) {
+  const match = CLOUDINARY.exec(url);
+  if (!match) return url;
+  const [, base, kind, rest] = match;
+  if (CLOUDINARY_TRANSFORM.test(rest)) return url;
+  // Video is left at its own size — a cap belongs to whoever cut the footage.
+  const fit = kind.toLowerCase() === 'video' || !width ? 'f_auto,q_auto' : `f_auto,q_auto,c_limit,w_${width}`;
+  return `${base}/${fit}/${rest}`;
+}
+
+/** A URL for an <img> or <video>: checked, and sized if it is a Cloudinary one. */
+function assetUrl(value, width = 1200) {
+  const raw = String(value ?? '').trim();
+  if (!/^(https?:|\/)/i.test(raw)) return '';
+  return esc(cloudinaryFit(raw, width));
+}
+
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
@@ -354,7 +387,7 @@ const LOGO_LIGHT = '/assets/logo-light.png';
 function brandInner() {
   const settings = state.settings ?? {};
   const dark = currentTheme() === 'dark';
-  const url = safeUrl(dark ? settings.logoDarkUrl : settings.logoLightUrl) || (dark ? LOGO_DARK : LOGO_LIGHT);
+  const url = assetUrl(dark ? settings.logoDarkUrl : settings.logoLightUrl, 600) || (dark ? LOGO_DARK : LOGO_LIGHT);
   return `<img class="brand-logo" src="${url}" alt="Advatar" width="568" height="170" decoding="async">`;
 }
 
@@ -463,7 +496,7 @@ function mediaTile({ driveFileId, imageUrl, title, ratio = 'reel', empty = 'Asse
       <button type="button" class="media-play" aria-label="Play ${label}">${icon('play')}</button>
     </div>`;
   }
-  const url = safeUrl(imageUrl);
+  const url = assetUrl(imageUrl, ratio === 'wide' ? 1400 : 900);
   if (url) {
     return `<div class="${shape}"><img src="${url}" alt="${esc(title || '')}" loading="lazy" decoding="async"></div>`;
   }
@@ -527,10 +560,10 @@ async function renderHome() {
   const [settings, clients] = await Promise.all([load('settings'), load('clients')]);
   const wins = clients.filter((client) => client.isRecentWin).sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
 
-  const desktopVideo = safeUrl(settings.heroVideoDesktopUrl);
-  const mobileVideo = safeUrl(settings.heroVideoMobileUrl);
-  const poster = safeUrl(settings.heroPosterUrl);
-  const hand = safeUrl(settings.heroHandAssetUrl);
+  const desktopVideo = assetUrl(settings.heroVideoDesktopUrl);
+  const mobileVideo = assetUrl(settings.heroVideoMobileUrl);
+  const poster = assetUrl(settings.heroPosterUrl, 1920);
+  const hand = assetUrl(settings.heroHandAssetUrl, 1400);
 
   /*
     Hero media is optional by design. With no assets the CSS light shaft alone
@@ -1233,7 +1266,7 @@ async function renderLookInside() {
     if (!entry) {
       return `<div class="process-media media--empty">${icon('image')}<span>Image coming soon</span></div>`;
     }
-    const src = /^(https?:|\/)/.test(entry.image) ? safeUrl(entry.image) : esc(driveThumb(entry.image, 1600));
+    const src = /^(https?:|\/)/.test(entry.image) ? assetUrl(entry.image, 1600) : esc(driveThumb(entry.image, 1600));
     return `<figure class="process-media">
       <img src="${src}" alt="${esc(entry.caption || '')}" loading="lazy" decoding="async" referrerpolicy="no-referrer">
       ${entry.caption ? `<figcaption class="tiny">${esc(entry.caption)}</figcaption>` : ''}
@@ -1977,7 +2010,7 @@ function mountReveals() {
 /** Layer the blurred still from settings behind everything, when one is set. */
 function mountAmbientStill() {
   $('.ambient-still')?.remove();
-  const url = safeUrl(state.settings?.textureUrl);
+  const url = assetUrl(state.settings?.textureUrl, 1920);
   if (!url) return;
 
   const img = document.createElement('img');
@@ -2934,12 +2967,19 @@ function openSettingsEditor({ title, subtitle, fields }) {
 
 /* -------------------------------------------------------- Edit schemas --- */
 
+/*
+  Every image field takes the same thing, so the wording is written once. A
+  Cloudinary URL is resized and re-encoded on delivery — see assetUrl — so
+  there's nothing to prepare before pasting one in.
+*/
+const IMAGE_HINT = 'Paste a Cloudinary URL (or any image link). Cloudinary images are resized and compressed for the web automatically.';
+
 const CLIENT_FIELDS = [
   { name: 'name', label: 'Client name', type: 'text' },
   { name: 'category', label: 'Industry', type: 'text', hint: 'Groups the client on Our Work — e.g. "Personal Brands & Creators".' },
   { name: 'tagline', label: 'Tagline', type: 'text' },
   { name: 'websiteUrl', label: 'Website URL', type: 'text' },
-  { name: 'logoUrl', label: 'Logo URL', type: 'text' },
+  { name: 'logoUrl', label: 'Logo URL', type: 'text', hint: IMAGE_HINT },
   { name: 'notes', label: 'Notes', type: 'text', hint: 'e.g. "Also event photography coverage".' },
   { name: 'order', label: 'Order', type: 'number' },
   { name: 'featured', label: 'Featured (selected reels)', type: 'checkbox' },
@@ -2962,22 +3002,22 @@ const CLIENT_FIELDS = [
 const WEBSITE_FIELDS = [
   { name: 'name', label: 'Site name', type: 'text' },
   { name: 'liveUrl', label: 'Live URL', type: 'text' },
-  { name: 'screenshotUrl', label: 'Screenshot URL', type: 'text' },
+  { name: 'screenshotUrl', label: 'Screenshot URL', type: 'text', hint: IMAGE_HINT },
   { name: 'tags', label: 'Tags', type: 'lines', hint: 'One tag per line.' },
   { name: 'order', label: 'Order', type: 'number' },
 ];
 
 const PHOTO_FIELDS = [
   { name: 'name', label: 'Category name', type: 'text' },
-  { name: 'coverPhotoUrl', label: 'Cover photo URL', type: 'text' },
-  { name: 'photos', label: 'Photos', type: 'lines', hint: 'One image URL per line.' },
+  { name: 'coverPhotoUrl', label: 'Cover photo URL', type: 'text', hint: IMAGE_HINT },
+  { name: 'photos', label: 'Photos', type: 'lines', hint: `One image URL per line. ${IMAGE_HINT}` },
   { name: 'order', label: 'Order', type: 'number' },
 ];
 
 const BRANDING_FIELDS = [
   { name: 'clientName', label: 'Client name', type: 'text' },
   { name: 'type', label: 'Type', type: 'select', options: ['logo', 'carousel', 'edit'] },
-  { name: 'mediaUrl', label: 'Media URL', type: 'text' },
+  { name: 'mediaUrl', label: 'Media URL', type: 'text', hint: IMAGE_HINT },
   { name: 'order', label: 'Order', type: 'number' },
 ];
 
@@ -2999,12 +3039,12 @@ function mountEditHandlers() {
   const handlers = {
     hero: () => openSettingsEditor({
       title: 'Hero assets',
-      subtitle: 'Leave any of these blank and the CSS-only golden hero is used instead.',
+      subtitle: 'Leave any of these blank and the CSS-only golden hero is used instead. Cloudinary URLs are compressed on delivery.',
       fields: [
         { name: 'heroVideoDesktopUrl', label: 'Hero video — desktop', type: 'text' },
         { name: 'heroVideoMobileUrl', label: 'Hero video — mobile', type: 'text' },
-        { name: 'heroPosterUrl', label: 'Poster image (slow-connection fallback)', type: 'text' },
-        { name: 'heroHandAssetUrl', label: 'Hand asset (PNG/WebP with transparency)', type: 'text' },
+        { name: 'heroPosterUrl', label: 'Poster image (slow-connection fallback)', type: 'text', hint: IMAGE_HINT },
+        { name: 'heroHandAssetUrl', label: 'Hand asset (PNG/WebP with transparency)', type: 'text', hint: IMAGE_HINT },
       ],
     }),
 
@@ -3012,11 +3052,11 @@ function mountEditHandlers() {
       title: 'Logos & texture',
       subtitle: 'Leave the logos empty to use the built-in Advatar wordmark.',
       fields: [
-        { name: 'logoLightUrl', label: 'Logo — light mode (dark artwork)', type: 'text' },
-        { name: 'logoDarkUrl', label: 'Logo — dark mode (light artwork)', type: 'text' },
+        { name: 'logoLightUrl', label: 'Logo — light mode (dark artwork)', type: 'text', hint: IMAGE_HINT },
+        { name: 'logoDarkUrl', label: 'Logo — dark mode (light artwork)', type: 'text', hint: IMAGE_HINT },
         {
           name: 'textureUrl', label: 'Background texture', type: 'text',
-          hint: 'A still from your work. It is blurred and dimmed behind every page.',
+          hint: `A still from your work. It is blurred and dimmed behind every page. ${IMAGE_HINT}`,
         },
       ],
     }),
@@ -3051,6 +3091,7 @@ function mountEditHandlers() {
 
     gallery: () => openSettingsEditor({
       title: 'Hiring gallery',
+      subtitle: IMAGE_HINT,
       fields: [{
         name: 'hiringGallery', label: 'Behind the scenes', type: 'rows',
         columns: [
@@ -3207,7 +3248,7 @@ async function openSubmissionsList() {
   two are drawn from the same artwork, so they line up — and flies into the
   nav's logo while the black lifts away to reveal the page.
 */
-const FILM_MARK = { x: 367, y: 301, w: 539, frameW: 1280, frameH: 720 }; // wordmark in the last frame
+const FILM_MARK = { x: 349, y: 297, w: 574, frameW: 1280, frameH: 720 }; // wordmark in the last frame
 const LOGO_INSET = { x: 6 / 568, y: 6 / 170, w: 556 / 568 };              // the mark within the logo files
 
 async function playLoader() {
@@ -3223,9 +3264,9 @@ async function playLoader() {
     };
     const timers = [
       // A slow connection shouldn't hold the site hostage: if the film hasn't
-      // started within 3.5s, or hasn't finished within 9s, go straight in.
+      // started within 3.5s, or hasn't finished within 6.5s, go straight in.
       setTimeout(() => { if (film.currentTime < 0.2) finish(); }, 3500),
-      setTimeout(() => finish(), 9000),
+      setTimeout(() => finish(), 6500),
     ];
     function finish() {
       if (done) return;
