@@ -216,6 +216,13 @@ the nav, landing exactly on the logo, while the backdrop fades away to reveal th
   sits a quarter of the frame in from the nearest edge — so none of the logo bleeds out past
   the film. It is painted in `index.html` rather than `app.js` so it is already tracking
   before the wipe arrives. The skip button flips to dark-on-light over the opening.
+
+  The film's own edges are feathered into the wash with a CSS mask as well. Browsers and
+  displays don't all show video in exactly the colours it reads back as — one showed the
+  film's edge five levels brighter than the wash, a visible rectangle on flat grey — so the
+  join can't rely on the colours matching exactly. Spread over the feather, a difference like
+  that is too gradual to see. The wordmark is more than a quarter of the frame in from every
+  side, so the feather never reaches it.
 - The film was cut down twice from the supplied 10s master. The wordmark lands at 2.7s and
   then creeps imperceptibly smaller for another 2.7 seconds, which just read as a wait, so
   the tail is gone. A watermark in the bottom-right corner was painted out with ffmpeg's

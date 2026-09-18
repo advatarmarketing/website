@@ -2601,6 +2601,24 @@ html[data-loading] { overflow: hidden; }
   max-height: 78vh;
   object-fit: contain;
   transition: opacity 260ms var(--ease);
+  /*
+    The film's edges fade into the wash rather than meeting it at a line. The
+    wash is matched to the colour the film's edge reads back as, but browsers
+    and displays don't all show video in the same colours as they read it back
+    — one showed the film's edge five levels brighter than the wash, which is a
+    plainly visible rectangle on a flat grey. Spread over the feather, any such
+    difference becomes a gradient too shallow to see, in any browser, for the
+    light opening and the dark ending alike. The wordmark sits over a quarter of
+    the frame in from every side, so the feather never touches it.
+  */
+  -webkit-mask-image:
+    linear-gradient(to right, transparent, #000 16%, #000 84%, transparent),
+    linear-gradient(to bottom, transparent, #000 16%, #000 84%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(to right, transparent, #000 16%, #000 84%, transparent),
+    linear-gradient(to bottom, transparent, #000 16%, #000 84%, transparent);
+  mask-composite: intersect;
 }
 .loader--lifting {
   background-color: transparent;
