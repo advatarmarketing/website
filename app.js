@@ -514,6 +514,26 @@ function cloudinaryPoster(url, width) {
     (match) => `${match}so_0,c_limit,w_${width},q_auto/`);
 }
 
+/*
+  A Cloudinary video with our own settings put in front of any it already has,
+  then re-encoded for the browser (f_auto picks the format this browser plays
+  best, q_auto the lowest quality nobody would notice). Used for the hero, which
+  needs a particular size and shape on each kind of screen.
+*/
+function cloudinaryVideo(url, transform) {
+  const [path] = String(url).split(/[?#]/);
+  return path.replace(/\/video\/(upload|authenticated|private)\//i,
+    (match) => `${match}${transform}/f_auto,q_auto/`);
+}
+
+/** A still from a Cloudinary video — its first frame — cut the same way. */
+function cloudinaryStill(url, transform) {
+  const [path] = String(url).split(/[?#]/);
+  const still = path.replace(/\.[a-z0-9]{2,5}$/i, '') + '.jpg';
+  return still.replace(/\/video\/(upload|authenticated|private)\//i,
+    (match) => `${match}so_0,${transform},q_auto/`);
+}
+
 /** The poster for any video, whichever service it lives on. */
 const videoPoster = (ref, width) => (isCloudinaryVideo(ref) ? cloudinaryPoster(ref, width) : driveThumb(ref, width));
 
@@ -618,32 +638,80 @@ async function renderHome() {
   */
   const desktopMedia = assetUrl(settings.heroVideoDesktopUrl, 2400);
   const mobileMedia = assetUrl(settings.heroVideoMobileUrl, 1200);
-  const hand = assetUrl(settings.heroHandAssetUrl, 1400);
 
   const desktopVideo = looksLikeVideo(desktopMedia) ? desktopMedia : '';
   const mobileVideo = looksLikeVideo(mobileMedia) ? mobileMedia : '';
 
   /*
-    The poster is the frame held while the film loads, and the whole background
-    on a connection too slow for it. An explicit one wins; failing that, a
-    Cloudinary video can hand over its own first frame, so setting the video
-    alone is enough. A still dropped into a video field becomes the poster too,
-    which is how it ends up on screen.
+    PHONES. A phone screen is tall and a hero film is usually wide, so on a
+    phone the film is cut to the screen's shape by Cloudinary before it's sent —
+    720 pixels wide, a fraction of the full film's weight on mobile data — rather
+    than sending the whole wide film and letting the phone throw most of it away.
+
+    It's cut two ways, listed in order, and the phone plays the first it can:
+
+      1. a smart crop (g_auto) — Cloudinary follows whatever the shot is about,
+         so a face at the edge of a wide frame stays on screen. On a long film
+         Cloudinary prepares this in the background the first time it's asked
+         for, and answers "not ready yet" until it's done; and
+      2. a plain crop from the middle, which is always ready.
+
+    So a phone never gets a blank hero: it plays the middle crop until the smart
+    one exists, then the smart one from then on. Both come from the phone box if
+    it's filled in, otherwise from the computer one — a film already cut tall
+    passes through the crop unchanged.
+  */
+  const PHONE = '(max-width: 720px)';
+  const onPhone = window.matchMedia(PHONE).matches;
+  const phoneRef = isCloudinaryVideo(settings.heroVideoMobileUrl) ? settings.heroVideoMobileUrl
+    : !settings.heroVideoMobileUrl && isCloudinaryVideo(settings.heroVideoDesktopUrl) ? settings.heroVideoDesktopUrl
+    : '';
+  const PHONE_CUT = 'c_fill,ar_9:16,w_720';
+  const phoneSources = phoneRef
+    ? [cloudinaryVideo(phoneRef, `${PHONE_CUT},g_auto`), cloudinaryVideo(phoneRef, PHONE_CUT)]
+    : mobileVideo ? [mobileVideo] : [];
+  // On a computer, a cap at full HD: an upload in 4K would otherwise be sent
+  // in 4K to a screen that can't show it.
+  const computerSource = isCloudinaryVideo(settings.heroVideoDesktopUrl)
+    ? cloudinaryVideo(settings.heroVideoDesktopUrl, 'c_limit,w_1920')
+    : desktopVideo;
+
+  /*
+    The poster is the frame held while the film loads — and the whole background
+    when the film can't play: a slow connection, Data Saver, or an iPhone in Low
+    Power Mode, which won't start a film on its own. An explicit one wins;
+    failing that, a Cloudinary video hands over its own first frame, cut to the
+    same shape as the film this screen is about to get. A still dropped into a
+    video field becomes the poster too, which is how it ends up on screen.
   */
   const posterSource = settings.heroPosterUrl
     || (!desktopVideo && desktopMedia ? settings.heroVideoDesktopUrl : '')
+    || (onPhone && phoneRef ? cloudinaryStill(phoneRef, `${PHONE_CUT},g_auto`) : '')
     || (isCloudinaryVideo(desktopVideo) ? cloudinaryPoster(settings.heroVideoDesktopUrl, 1920) : '');
-  const poster = assetUrl(posterSource, 1920);
+  const poster = assetUrl(posterSource, onPhone ? 720 : 1920);
+
+  /*
+    Data Saver on: the visitor has asked sites to use less data, so the film is
+    left out and its still stands in for it.
+  */
+  const saveData = Boolean(navigator.connection?.saveData);
+  const hasVideo = !saveData && (computerSource || phoneSources.length);
 
   /*
     Hero media is optional by design. With no assets the CSS light shaft alone
     still reads as a finished hero — see .hero-light in styles.css.
+
+    crossorigin lets the cursor read the colour of the film under it, so it can
+    swap colour over a bright shot the same way it does over the gold. Cloudinary
+    allows that; an address from anywhere else might refuse, and a refused
+    request would stop the film loading at all — so only Cloudinary gets it.
   */
-  const heroMedia = desktopVideo || mobileVideo
+  const readable = isCloudinaryVideo(computerSource || phoneRef) ? 'crossorigin="anonymous"' : '';
+  const heroMedia = hasVideo
     ? `<div class="hero-media">
-         <video autoplay muted loop playsinline ${poster ? `poster="${poster}"` : ''}>
-           ${mobileVideo ? `<source src="${mobileVideo}" media="(max-width: 720px)">` : ''}
-           ${desktopVideo ? `<source src="${desktopVideo}">` : ''}
+         <video autoplay muted loop playsinline preload="auto" ${readable} ${poster ? `poster="${poster}"` : ''}>
+           ${phoneSources.map((src) => `<source src="${esc(src)}" media="${PHONE}">`).join('')}
+           ${computerSource ? `<source src="${esc(computerSource)}">` : ''}
          </video>
        </div>`
     : poster
@@ -657,20 +725,26 @@ async function renderHome() {
     and gives the "merged into the background" look without needing an alpha
     codec that Safari wouldn't play.
 
-    settings.heroHandAssetUrl still overrides it, and accepts an image or a video.
+    It is always this hand. There used to be a box in edit mode to swap it for
+    something else, but it sat beside the background boxes and read as one of
+    them — pasting the background there replaced the hand, which is the one part
+    of the hero meant to stay. (Anything still saved in that old box is ignored.)
   */
-  const handIsVideo = looksLikeVideo(hand);
-  const heroHand = hand
-    ? (handIsVideo
-        ? `<video class="hero-hand" autoplay muted loop playsinline preload="metadata" aria-hidden="true" data-cursor-sample>
-             <source src="${hand}">
-           </video>`
-        : `<img class="hero-hand" src="${hand}" alt="" decoding="async" data-cursor-sample>`)
-    : `<video class="hero-hand" autoplay muted loop playsinline preload="metadata"
+  const heroHand = `<video class="hero-hand" autoplay muted loop playsinline preload="metadata"
               poster="/assets/hero-hand-poster.jpg" aria-hidden="true" data-cursor-sample>
          <source src="/assets/hero-hand-mobile.mp4" media="(max-width: 720px)" type="video/mp4">
          <source src="/assets/hero-hand.mp4" type="video/mp4">
        </video>`;
+
+  /*
+    With a background of your own, the gold — the hand, the shaft of light, the
+    amber glow — becomes a faint layer over it rather than the whole picture.
+    How faint is set in edit mode (Golden overlay, 0–100); styles.css reads it as
+    --overlay-k.
+  */
+  const overlay = Math.min(100, Math.max(0, Number(settings.heroOverlay ?? 30))) / 100;
+  const heroClass = heroMedia ? 'hero hero--media' : 'hero';
+  const heroStyle = heroMedia ? ` style="--overlay-k:${overlay}"` : '';
 
   const teasers = [
     { n: '01', glyph: 'film', title: 'Video Marketing', copy: 'What we specialise in.', href: '/our-work#video' },
@@ -695,7 +769,7 @@ async function renderHome() {
 
   return `
   <main id="main">
-    <section class="hero">
+    <section class="${heroClass}"${heroStyle}>
       ${heroMedia}
       <div class="hero-light" data-cursor-sample></div>
       <!-- Grain over the hero's own background, but UNDER the hand and the
@@ -3220,8 +3294,9 @@ function mountEditHandlers() {
   const handlers = {
     hero: () => openSettingsEditor({
       title: 'Hero assets',
-      subtitle: 'The background of the home page\'s first screen. Leave all of these blank '
-        + 'and the golden hero the site draws itself is used instead.',
+      subtitle: 'The background of the home page\'s first screen. It sits behind the hand and the '
+        + 'gold, which stay on top as a faint overlay. Leave the backgrounds blank and the golden '
+        + 'hero the site draws itself is used on its own.',
       fields: [
         {
           name: 'heroVideoDesktopUrl', label: 'Background — computer', type: 'text',
@@ -3235,7 +3310,11 @@ function mountEditHandlers() {
           name: 'heroPosterUrl', label: 'Still image (shown while a video loads)', type: 'text',
           hint: `Leave this blank when the background is a Cloudinary video — its own first frame is used. ${IMAGE_HINT}`,
         },
-        { name: 'heroHandAssetUrl', label: 'Hand asset (image or video)', type: 'text', hint: IMAGE_HINT },
+        {
+          name: 'heroOverlay', label: 'Golden overlay (0–100)', type: 'text',
+          hint: 'How strongly the hand, the line of light and the gold glow show over your background. '
+            + '0 is none at all, 100 is the full gold hero. Leave it blank for 30. Only used when a background is set.',
+        },
       ],
     }),
 
@@ -3933,7 +4012,7 @@ function pixelAt(el, x, y) {
     let width;
     let height;
     if (el instanceof HTMLVideoElement) {
-      if (el.readyState < 2 || !sameOrigin(el.currentSrc)) return null;
+      if (el.readyState < 2 || (!sameOrigin(el.currentSrc) && !el.crossOrigin)) return null;
       width = el.videoWidth;
       height = el.videoHeight;
     } else if (el instanceof HTMLImageElement) {

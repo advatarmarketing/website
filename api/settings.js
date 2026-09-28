@@ -29,6 +29,13 @@ function cleanImageRef(value) {
   return cleanUrl(raw);
 }
 
+function overlayStrength(value) {
+  const text = String(value ?? '').trim();
+  const number = Number(text);
+  if (!text || !Number.isFinite(number)) return 30;
+  return Math.round(Math.min(100, Math.max(0, number)));
+}
+
 function sanitize(settings) {
   const defaults = seedFor('settings');
   const input = settings && typeof settings === 'object' ? settings : {};
@@ -37,6 +44,9 @@ function sanitize(settings) {
     heroVideoMobileUrl: cleanUrl(input.heroVideoMobileUrl),
     heroPosterUrl: cleanUrl(input.heroPosterUrl),
     heroHandAssetUrl: cleanUrl(input.heroHandAssetUrl),
+    /* How strongly the gold shows over a background of your own, 0–100.
+       Blank, or anything that isn't a number, means the default of 30. */
+    heroOverlay: overlayStrength(input.heroOverlay),
     /* Theme-aware brand marks. Empty falls back to the built-in SVG wordmark. */
     logoLightUrl: cleanUrl(input.logoLightUrl),
     logoDarkUrl: cleanUrl(input.logoDarkUrl),

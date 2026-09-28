@@ -1024,6 +1024,99 @@ video.hero-hand { height: auto; object-fit: contain; }
   }
 }
 
+/* ------------------------------------------ Hero over your own footage --- */
+
+/*
+  With a background set in edit mode (.hero--media), the order from the back is:
+
+    1. your video or image, full-bleed
+    2. the gold — the line of light and its glow — as a faint wash
+    3. the hand, fainter still
+    4. a soft shade behind the headline, so the words stay readable
+    5. the words
+
+  --overlay-k is the "Golden overlay" number from edit mode, as 0–1. It scales
+  the gold and the hand together, so one setting keeps them in proportion.
+
+  What changes from the gold-only hero is what the gold is ALLOWED to cover.
+  Without footage the gold layer ends in a solid colour and holds the left half
+  in solid black, because it IS the background. Over footage both of those would
+  hide the film completely, so here the gold keeps only its light.
+*/
+.hero--media { --overlay-k: 0.3; }
+
+.hero--media .hero-light,
+:root[data-theme='light'] .hero--media .hero-light {
+  opacity: var(--overlay-k);
+  background:
+    linear-gradient(90deg,
+      transparent 55%,
+      rgba(255, 178, 74, 0.18) 60%,
+      rgba(255, 214, 150, 0.62) 63.5%,
+      rgba(255, 240, 214, 0.95) 65%,
+      rgba(255, 214, 150, 0.62) 66.5%,
+      rgba(255, 178, 74, 0.20) 71%,
+      transparent 80%),
+    radial-gradient(38% 78% at 65% 50%, rgba(255, 150, 40, 0.55), transparent 72%),
+    radial-gradient(58% 96% at 84% 52%, rgba(214, 112, 28, 0.62), transparent 74%),
+    radial-gradient(70% 90% at 58% 50%, rgba(150, 78, 24, 0.34), transparent 70%);
+}
+.hero--media .hero-hand,
+:root[data-theme='light'] .hero--media .hero-hand { opacity: calc(0.55 * var(--overlay-k)); }
+/* Grain is for flat colour; over real footage it would only soften the picture. */
+.hero--media .hero-grain { opacity: calc(var(--grain-opacity) * 0.4); }
+
+/*
+  The shade behind the headline: strongest at the left edge where the words
+  start, gone by the middle, so most of the film is untouched. Made from the
+  page colour, so it is dark in dark mode and cream in light mode, to match the
+  headline's own colour either way.
+*/
+.hero--media::after,
+:root[data-theme='light'] .hero--media::after {
+  background:
+    linear-gradient(90deg,
+      color-mix(in srgb, var(--bg) 72%, transparent) 0%,
+      color-mix(in srgb, var(--bg) 45%, transparent) 30%,
+      transparent 58%),
+    /* top: under the nav. bottom: under the two short lines at the foot of
+       the hero, which sit on the film and need their own shade to be read. */
+    linear-gradient(to bottom,
+      color-mix(in srgb, var(--bg) 45%, transparent) 0%, transparent 18%,
+      transparent 66%,
+      color-mix(in srgb, var(--bg) 62%, transparent) 84%,
+      color-mix(in srgb, var(--bg) 80%, transparent) 100%);
+}
+
+/* A smaller headline, so more of the film is on show around it. */
+.hero--media h1 { font-size: clamp(2.2rem, 5vw, 4.5rem); }
+
+/* On a phone the headline sits across the top, so the shade comes from there. */
+@media (max-width: 768px) {
+  .hero--media::after,
+  :root[data-theme='light'] .hero--media::after {
+    background: linear-gradient(to bottom,
+      color-mix(in srgb, var(--bg) 70%, transparent) 0%,
+      color-mix(in srgb, var(--bg) 40%, transparent) 45%,
+      transparent 65%,
+      color-mix(in srgb, var(--bg) 60%, transparent) 100%);
+  }
+  .hero--media .hero-light,
+  :root[data-theme='light'] .hero--media .hero-light {
+    background:
+      linear-gradient(90deg,
+        transparent 58%,
+        rgba(255, 178, 74, 0.18) 64%,
+        rgba(255, 214, 150, 0.6) 69%,
+        rgba(255, 240, 214, 0.92) 71%,
+        rgba(255, 214, 150, 0.6) 73%,
+        rgba(255, 178, 74, 0.20) 80%,
+        transparent 92%),
+      radial-gradient(60% 46% at 72% 76%, rgba(255, 150, 40, 0.52), transparent 74%),
+      radial-gradient(90% 56% at 62% 92%, rgba(214, 112, 28, 0.58), transparent 76%);
+  }
+}
+
 .hero-content {
   position: relative;
   width: 100%;

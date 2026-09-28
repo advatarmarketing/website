@@ -351,23 +351,44 @@ Two flags drive where a client appears:
 
 ## The background of the home page
 
-The first screen's background is set under **Edit hero assets**. Every box there takes a
-**Cloudinary** link — the address from Cloudinary's **Copy URL** button — or any other web
-address. Cloudinary files are re-encoded and sized for the web on their way to the page, so
-there is nothing to prepare before pasting one in.
+Set under **Edit hero assets**. From the back to the front, the first screen is:
 
-- **Background — computer** takes either a video *or* a still image. Paste whichever you
-  have; the site works out which it is, including for a Cloudinary link with no `.mp4` on
-  the end of it.
-- **Background — phone** is the same again, cropped for a tall screen. Leave it empty and
-  phones use the one above.
-- **Still image** is the frame held while a video loads, and the whole background on a
-  connection too slow for the video. With a Cloudinary video you can leave this empty — its
-  own first frame is used.
+1. **your background** — a video or a still, filling the screen;
+2. **the gold** — the line of light and its amber glow, now a faint wash;
+3. **the hand**, fainter still;
+4. a soft shade behind the headline and the two short lines at the foot, so the words stay
+   readable; and
+5. the words.
 
-Leave all of them empty and the hero the site draws itself is used: the amber light shaft is
-pure CSS, recomposes on a phone so the headline always sits on dark ground, and needs no
-files at all.
+The boxes:
+
+- **Background — computer** takes a video *or* a still image: the link from Cloudinary's
+  **Copy URL**, or any other web address. Cloudinary files are re-encoded and sized for the
+  web on the way to the page, so there is nothing to prepare first.
+- **Background — phone** — the same again, for a tall screen. Leave it empty and phones use
+  the computer one. Either way, on a phone a Cloudinary film is cut to the phone's shape and
+  sent at 720 pixels wide, a fraction of the full film's weight on mobile data. The cut
+  follows whatever the shot is about (Cloudinary's smart crop), so a face at the side of a
+  wide frame stays on screen. The first time a new film is asked for, Cloudinary prepares
+  that smart crop in the background; until it's ready, phones play a plain crop from the
+  middle instead, so the hero is never blank. For full control over what a phone shows,
+  upload a vertical edit and put it here.
+- Phones with **Data Saver** switched on get the still, not the film. So do iPhones in Low
+  Power Mode, which don't start films on their own — the still is cut to the phone's shape
+  too, so it looks intentional rather than broken.
+- **Still image** — the frame held while the video loads, and the whole background on a
+  connection too slow for it. With a Cloudinary video, leave it empty: the video's own first
+  frame is used.
+- **Golden overlay (0–100)** — how strongly the gold and the hand show over your background.
+  `0` hides them, `100` is the full gold hero, and empty means `30`. Raise it if the hero
+  feels plain, lower it to show more of the film.
+
+The hand is always the site's own hand. There used to be a box to replace it, but it read as
+one of the background boxes, so it has gone; anything saved in it before is ignored.
+
+Leave the background boxes empty and the gold hero is used on its own, exactly as before:
+the amber light is pure CSS, recomposes on a phone so the headline always sits on dark
+ground, and needs no files at all.
 
 ## Videos
 
