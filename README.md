@@ -365,17 +365,24 @@ The boxes:
 - **Background — computer** takes a video *or* a still image: the link from Cloudinary's
   **Copy URL**, or any other web address. Cloudinary files are re-encoded and sized for the
   web on the way to the page, so there is nothing to prepare first.
-- **Background — phone** — the same again, for a tall screen. Leave it empty and phones use
-  the computer one. Either way, on a phone a Cloudinary film is cut to the phone's shape and
-  sent at 720 pixels wide, a fraction of the full film's weight on mobile data. The cut
-  follows whatever the shot is about (Cloudinary's smart crop), so a face at the side of a
-  wide frame stays on screen. The first time a new film is asked for, Cloudinary prepares
-  that smart crop in the background; until it's ready, phones play a plain crop from the
-  middle instead, so the hero is never blank. For full control over what a phone shows,
-  upload a vertical edit and put it here.
-- Phones with **Data Saver** switched on get the still, not the film. So do iPhones in Low
-  Power Mode, which don't start films on their own — the still is cut to the phone's shape
-  too, so it looks intentional rather than broken.
+- **Background — phone** — a version cut for a tall screen. Leave it empty and phones use
+  the computer one.
+
+The film is never cropped to the shape of the screen: it is shown whole, at its own shape,
+as a panel — so a split-screen edit showing two shots at once keeps both of them. Only its
+size changes, 1600 pixels across on a computer and 720 on a phone, which is a fraction of
+the weight on mobile data.
+
+One copy serves every browser, in H.264 MP4, asked for by name. Cloudinary's automatic
+format would send each browser whichever modern format it handles best — free for a
+photograph, but for video each one is a whole re-encode of the film, made the first time
+somebody asks. On a film of any length that took over a minute, and Cloudinary gave up
+altogether on the version for iPhones, which is why the film would not play on a phone.
+
+Cloudinary still has to make that one copy the first time it is asked for, so the first
+visit after a new upload can wait. If the film hasn't started within eight seconds, the
+site falls back to the file exactly as uploaded, which never needs preparing.
+
 - **Still image** — the frame held while the video loads, and the whole background on a
   connection too slow for it. With a Cloudinary video, leave it empty: the video's own first
   frame is used.

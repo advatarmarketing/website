@@ -988,6 +988,13 @@ a.glass-card:hover,
   position: absolute;
   right: 0;
   top: 50%;
+  /*
+    Wider than the screen on purpose. The base rule for pictures and video caps
+    them at the width of whatever holds them, which quietly clamped this to the
+    width of the screen — so on a phone the plate had never once been the size
+    the rule below asks for, and only the phone in the hand ever showed.
+  */
+  max-width: none;
   width: min(88%, 70rem);
   right: -7%;
   z-index: 0;
@@ -1131,14 +1138,45 @@ video.hero-hand { height: auto; object-fit: contain; }
   the picture below them.
 */
 @media (max-width: 768px) {
+  /*
+    The words sit at the top rather than in the middle of the screen. Centred,
+    they were pushed down the frame by the two short lines at the foot, leaving
+    a long empty stretch under the bar and the film crowded into the last of
+    the screen.
+  */
+  .hero--media { justify-content: flex-start; padding-top: 7.5rem; }
+  .hero--media .hero-content { flex: 0 0 auto; justify-content: flex-start; }
+  .hero--media .hero-foot { margin-top: auto; }
+
+  /* The film sits directly under the button, not at the very bottom. */
   .hero--media .hero-media {
-    inset: auto 0 14% 0;
+    inset: 42% 0 auto 0;
     translate: none;
     width: 100%;
-    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 16%, #000 84%, transparent 100%);
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
     -webkit-mask-composite: source-over;
-    mask-image: linear-gradient(180deg, transparent 0%, #000 16%, #000 84%, transparent 100%);
+    mask-image: linear-gradient(180deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
     mask-composite: add;
+  }
+
+  /*
+    The hand, bigger and lower, so it reaches up into the film rather than
+    hiding off the bottom corner of the screen.
+  */
+  /*
+    The hand reaches up into the film from below: sized and placed so the hand
+    itself lands just under the film's lower edge, rather than the plate running
+    off the corner of the screen with only the phone showing.
+
+    On a phone the hand is the only gold shape with any size to it — the shaft
+    of light is a thin line here — so it carries more of the overlay than it
+    does on a computer, where the glow does that work.
+  */
+  .hero--media .hero-hand {
+    width: 220%;
+    right: -45%;
+    top: 69%;
+    opacity: min(1, calc(1.5 * var(--overlay-k)));
   }
   .hero--media::after,
   :root[data-theme='light'] .hero--media::after {
