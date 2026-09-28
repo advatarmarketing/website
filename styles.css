@@ -73,6 +73,15 @@
   --z-nav: 60;
   --z-modal: 100;
   --z-toast: 120;
+  /* Above everything, dialogs and the intro film included — otherwise, the
+     moment one opened, the real arrow would still be hidden and the circle
+     painted behind it: a pointer you couldn't see at all. */
+  --z-cursor: 1000;
+
+  /* The cursor — see "Scrolling and cursor" in app.js. */
+  --cursor-size: 16px;
+  --cursor-grow: 2.5;    /* how much it grows over something clickable */
+  --cursor-lerp: 0.15;   /* read by app.js — how closely it chases the mouse */
 
   color-scheme: dark;
 }
@@ -487,8 +496,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
               color var(--mid) var(--ease),
               transform var(--fast) var(--ease);
 }
+/*
+  Hover changes the --btn-bg variable, not the background itself. Setting the
+  background directly here used to win over .btn--gold:hover below — which only
+  sets the variable — so the gold button turned into a dark glass one on hover,
+  with its dark label almost invisible on it.
+*/
 .btn:hover {
-  background: rgba(255, 255, 255, 0.09);
+  --btn-bg: rgba(255, 255, 255, 0.09);
   border-color: rgba(255, 255, 255, 0.18);
 }
 .btn:active { transform: translateY(1px); }
@@ -741,11 +756,16 @@ a.glass-card:hover,
 .nav-actions { display: flex; align-items: center; gap: 0.6rem; margin-left: auto; }
 
 /*
-  LOGIN BUTTON — DO NOT BUILD UNTIL EXPLICITLY ASKED.
-  This slot is reserved for the Phase 9 "Login" pill that will link to the CRM.
-  Left empty on purpose; see the matching comment in app.js.
+  Login: a small pill in the top bar, linking to the client app. On a narrow
+  phone the bar has no room for it beside the logo and both buttons, so there
+  it moves into the menu instead — as the one gold button at the foot of it.
 */
-.nav-login-slot { display: contents; }
+.nav-login { gap: 0.45rem; }
+.nav-login .icon { width: 14px; height: 14px; }
+@media (max-width: 480px) { .nav-login { display: none; } }
+
+.nav-menu-login { padding-top: 1rem; }
+.nav-menu-login-btn { width: 100%; }
 
 /* The menu panel is reachable at every width (R3), not only on mobile. */
 .nav-toggle { display: inline-flex; }
@@ -2333,6 +2353,21 @@ a.glass-card:active, .glass-card--interactive:active { transform: translateY(-1p
   transition: opacity var(--mid) var(--ease);
 }
 .media--video:hover .media-frame::after { opacity: 1; }
+
+/*
+  A Cloudinary video plays in the browser's own player: it simply fills the
+  video-shaped box, with the browser's controls. There's no Drive "Pop out"
+  button to cover, so no shield over its corner.
+*/
+.media--video .media-frame video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+.media--video[data-source='cloudinary'] .media-frame::after { content: none; }
 .media--video .media-thumb-fill {
   transform: scale(1.3);
   filter: blur(22px) saturate(1.2) brightness(0.62);
@@ -2667,9 +2702,71 @@ html[data-loading] { overflow: hidden; }
 .loader-flyer img { position: absolute; inset: 0; width: 100%; height: 100%; }
 .loader-flyer-alt { opacity: 0; }
 
+/* ============================================ Smooth scroll and cursor ==== */
+
+/*
+  Lenis's own required rules (from lenis.css, which isn't loaded separately).
+  html.lenis only exists while smooth scrolling is running.
+*/
+html.lenis,
+html.lenis body { height: auto; }
+.lenis:not(.lenis-autoToggle).lenis-stopped { overflow: clip; }
+.lenis [data-lenis-prevent],
+.lenis [data-lenis-prevent-wheel],
+.lenis [data-lenis-prevent-touch] { overscroll-behavior: contain; }
+/* One direction only. Lenis's own sheet contains both, which trapped an
+   up-and-down scroll over a carousel: in a dialog, the dialog wouldn't scroll
+   while the pointer was over its row of case studies. */
+.lenis [data-lenis-prevent-horizontal] { overscroll-behavior-x: contain; }
+.lenis [data-lenis-prevent-vertical] { overscroll-behavior-y: contain; }
+/*
+  A video player is a page of its own, and a wheel turned over it goes to that
+  page, not ours — the glide would stop dead at every reel. So players ignore
+  the pointer while the page is actually gliding, and take it back the moment
+  it settles. (Lenis's own stylesheet does this whenever smooth scrolling is
+  on, which would make every player unclickable here.)
+*/
+.lenis.lenis-scrolling iframe { pointer-events: none; }
+
+/*
+  The cursor: a filled circle that chases the pointer, one of the site's two
+  colours. The element only exists on a computer with a mouse, and never under
+  "reduce motion"; where it exists, the real arrow is hidden — except over
+  anything you type into, where losing the I-beam makes a box feel broken.
+*/
+.cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: var(--cursor-size);
+  height: var(--cursor-size);
+  margin: calc(var(--cursor-size) / -2) 0 0 calc(var(--cursor-size) / -2);
+  border-radius: 50%;
+  background: var(--gold-1);
+  pointer-events: none;   /* it must never catch a click */
+  z-index: var(--z-cursor);
+  /* Position and size are written together every frame by app.js, so there is
+     deliberately no transition on transform — only the colour fades. */
+  transform: translate3d(-100px, -100px, 0) scale(1);
+  will-change: transform;
+  transition: background-color var(--fast) var(--ease), opacity var(--fast) var(--ease);
+}
+/* Over something gold, it takes the page's background colour instead. */
+.cursor[data-tone='alt'] { background: var(--bg); }
+/* Hidden until the pointer has moved, and while it's out of the window. */
+.cursor[data-ready='false'] { opacity: 0; }
+
+html[data-cursor='on'],
+html[data-cursor='on'] * { cursor: none !important; }
+html[data-cursor='on'] :is(input, textarea, select, [contenteditable='true'], [contenteditable='']) { cursor: auto !important; }
+
 /* ================================================== Reduced motion ======= */
 
 @media (prefers-reduced-motion: reduce) {
+  /* Belt and braces: app.js never starts the cursor here anyway. */
+  .cursor { display: none !important; }
+  html[data-cursor='on'], html[data-cursor='on'] * { cursor: auto !important; }
+
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;

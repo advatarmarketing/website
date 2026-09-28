@@ -209,7 +209,7 @@ function openModal({ title, subtitle = '', body, onMount, labelledBy = 'modal-ti
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
   backdrop.innerHTML = `
-    <div class="modal ${esc(className)}" role="dialog" aria-modal="true" aria-labelledby="${esc(labelledBy)}">
+    <div class="modal ${esc(className)}" role="dialog" aria-modal="true" aria-labelledby="${esc(labelledBy)}" data-lenis-prevent>
       <div class="modal-head">
         <div>
           <h2 id="${esc(labelledBy)}">${esc(title)}</h2>
@@ -227,6 +227,7 @@ function openModal({ title, subtitle = '', body, onMount, labelledBy = 'modal-ti
 
   document.body.append(backdrop);
   document.body.style.overflow = 'hidden';
+  pauseScrolling();
 
   const focusables = () =>
     $$('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])', modal)
@@ -264,6 +265,7 @@ function openModal({ title, subtitle = '', body, onMount, labelledBy = 'modal-ti
     document.removeEventListener('keydown', onKeydown);
     backdrop.remove();
     document.body.style.overflow = '';
+    resumeScrolling();
     if (opener instanceof HTMLElement && document.contains(opener)) opener.focus();
     openModalCleanup = null;
   };
@@ -286,6 +288,18 @@ const NAV_ITEMS = [
   { href: '/look-inside', label: 'Look Inside', glyph: 'eye' },
   { href: '/hiring', label: "We're Hiring" },
 ];
+
+/*
+  The client login. It goes to Advatar's own app — a separate site — so it is an
+  ordinary link to another address, and the page's own navigation leaves it
+  alone. One place to change it if the address ever moves.
+*/
+const LOGIN_URL = 'https://app.advatar.co.uk';
+
+const loginLink = (className = 'btn btn--sm btn--ghost nav-login') => `
+  <a class="${className}" href="${LOGIN_URL}">
+    ${icon('lock')}<span data-copy="nav.login">Login</span>
+  </a>`;
 
 /** The nav menu also lists Home, which the top bar covers with the logo. */
 const MENU_ITEMS = [{ href: '/', label: 'Home', glyph: 'home' }, ...NAV_ITEMS];
@@ -407,13 +421,7 @@ function navFragment(path) {
 
       <div class="nav-actions">
         ${themeToggleButton()}
-
-        <!--
-          LOGIN BUTTON — DO NOT BUILD UNTIL EXPLICITLY ASKED.
-          Phase 9 fills this slot with a "Login" pill linking to the CRM app.
-          Leave empty until then.
-        -->
-        <div class="nav-login-slot"></div>
+        ${loginLink()}
 
         <button type="button" class="icon-btn nav-toggle" data-nav-toggle
                 aria-label="Open menu" aria-expanded="false">${icon('menu')}</button>
@@ -445,6 +453,7 @@ function footerFragment(settings) {
 
         <div class="stack">
           <a class="link-arrow" href="mailto:${esc(email)}">${icon('mail')}<span>${esc(email)}</span></a>
+          <a class="link-arrow" href="${LOGIN_URL}">${icon('lock')}<span data-copy="footer.login">Client login</span></a>
           <div class="socials" aria-label="Social links">
             ${social('instagram', 'Instagram')}
             ${social('tiktok', 'TikTok')}
@@ -473,6 +482,32 @@ const eyebrow = (label, glyph = 'diamond', key = `eyebrow.${copyKey(label)}`) =>
 const driveThumb = (fileId, width = 720) =>
   `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w${width}`;
 
+/*
+  A video can be a Google Drive file (stored as its bare id) or a Cloudinary
+  video (stored as its full link) — the server's cleanVideoRef decides which,
+  and every video field accepts both.
+
+  Cloudinary is the better home for them: it plays in the browser's own player,
+  with no Drive page loaded around it and no Drive viewing limit to run into.
+*/
+const isCloudinaryVideo = (ref) => /^https:\/\/res\.cloudinary\.com\/[^/]+\/video\//i.test(String(ref ?? ''));
+
+/*
+  A still from a Cloudinary video, for the poster: its first frame (so_0), as a
+  JPEG, no wider than asked. Cloudinary makes it from the video on request —
+  there's nothing to upload separately. Ours goes first in the transformation
+  chain, so a link that already carries its own settings still works.
+*/
+function cloudinaryPoster(url, width) {
+  const [path] = String(url).split(/[?#]/);
+  const still = path.replace(/\.[a-z0-9]{2,5}$/i, '') + '.jpg';
+  return still.replace(/\/video\/(upload|authenticated|private)\//i,
+    (match) => `${match}so_0,c_limit,w_${width},q_auto/`);
+}
+
+/** The poster for any video, whichever service it lives on. */
+const videoPoster = (ref, width) => (isCloudinaryVideo(ref) ? cloudinaryPoster(ref, width) : driveThumb(ref, width));
+
 /** Media tile: a Drive embed, an image, or a labelled empty placeholder. */
 function mediaTile({ driveFileId, imageUrl, title, ratio = 'reel', empty = 'Asset coming soon' }) {
   const shape = `media media--${ratio}`;
@@ -485,12 +520,13 @@ function mediaTile({ driveFileId, imageUrl, title, ratio = 'reel', empty = 'Asse
   */
   if (driveFileId) {
     const label = esc(title || 'Video');
+    const source = isCloudinaryVideo(driveFileId) ? 'cloudinary' : 'drive';
     // The fill is blurred to nothing, so a tiny thumbnail does — dozens of tiles
     // decoding full-size posters twice over is what phones run out of memory on.
-    return `<div class="${shape} media--video" data-video="${esc(driveFileId)}" data-title="${label}">
-      <img class="media-thumb-fill" src="${esc(driveThumb(driveFileId, 60))}" alt="" loading="lazy"
+    return `<div class="${shape} media--video" data-video="${esc(driveFileId)}" data-source="${source}" data-title="${label}">
+      <img class="media-thumb-fill" src="${esc(videoPoster(driveFileId, 60))}" alt="" loading="lazy"
            decoding="async" referrerpolicy="no-referrer">
-      <img class="media-thumb" src="${esc(driveThumb(driveFileId, 540))}" alt="" loading="lazy"
+      <img class="media-thumb" src="${esc(videoPoster(driveFileId, 540))}" alt="" loading="lazy"
            decoding="async" referrerpolicy="no-referrer">
       <div class="media-frame"></div>
       <button type="button" class="media-play" aria-label="Play ${label}">${icon('play')}</button>
@@ -592,12 +628,12 @@ async function renderHome() {
   const handIsVideo = /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(hand);
   const heroHand = hand
     ? (handIsVideo
-        ? `<video class="hero-hand" autoplay muted loop playsinline preload="metadata" aria-hidden="true">
+        ? `<video class="hero-hand" autoplay muted loop playsinline preload="metadata" aria-hidden="true" data-cursor-sample>
              <source src="${hand}">
            </video>`
-        : `<img class="hero-hand" src="${hand}" alt="" decoding="async">`)
+        : `<img class="hero-hand" src="${hand}" alt="" decoding="async" data-cursor-sample>`)
     : `<video class="hero-hand" autoplay muted loop playsinline preload="metadata"
-              poster="/assets/hero-hand-poster.jpg" aria-hidden="true">
+              poster="/assets/hero-hand-poster.jpg" aria-hidden="true" data-cursor-sample>
          <source src="/assets/hero-hand-mobile.mp4" media="(max-width: 720px)" type="video/mp4">
          <source src="/assets/hero-hand.mp4" type="video/mp4">
        </video>`;
@@ -627,7 +663,7 @@ async function renderHome() {
   <main id="main">
     <section class="hero">
       ${heroMedia}
-      <div class="hero-light"></div>
+      <div class="hero-light" data-cursor-sample></div>
       <!-- Grain over the hero's own background, but UNDER the hand and the
            content — media never gets grained. -->
       <div class="hero-grain" aria-hidden="true"></div>
@@ -1429,7 +1465,7 @@ async function renderHiring() {
     <section class="section">
       <div class="shell">
         ${gallery.length
-          ? `<div class="bts-strip" data-reveal>${gallery.map((entry) =>
+          ? `<div class="bts-strip" data-reveal data-lenis-prevent-horizontal>${gallery.map((entry) =>
               mediaTile({
                 driveFileId: entry.driveFileId,
                 imageUrl: entry.imageUrl,
@@ -1649,11 +1685,11 @@ async function renderRoute(path, { restoreScroll = false } = {}) {
   if (hash) {
     const target = document.getElementById(hash.slice(1));
     if (target) {
-      target.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+      scrollToTarget(target);
       return;
     }
   }
-  if (!restoreScroll) window.scrollTo(0, 0);
+  if (!restoreScroll) scrollToTarget(0, { immediate: true });
 }
 
 function navigate(path, { replace = false } = {}) {
@@ -1664,8 +1700,8 @@ function navigate(path, { replace = false } = {}) {
   else history.pushState({}, '', url);
 
   if (samePage && url.hash) {
-    document.getElementById(url.hash.slice(1))
-      ?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+    const target = document.getElementById(url.hash.slice(1));
+    if (target) scrollToTarget(target);
     return;
   }
   renderRoute(url.pathname);
@@ -1748,6 +1784,13 @@ function releaseVideo(tile) {
   const frame = tile.querySelector('.media-frame');
   if (frame) {
     frameSizer?.unobserve(frame);
+    /* A playing <video> taken off the page can carry on playing its sound with
+       nothing on screen, so it is stopped and emptied before it goes. */
+    frame.querySelectorAll('video').forEach((video) => {
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+    });
     frame.replaceChildren();
   }
   delete tile.dataset.hydrated;
@@ -1762,11 +1805,29 @@ function hydrateVideo(tile) {
   clearTimeout(tileTimers.get(tile));
   tile.dataset.hydrated = 'true';
   if (tile.dataset.aspect) frame.style.setProperty('--ratio', tile.dataset.aspect);
-  frame.innerHTML = `<iframe src="${driveEmbed(tile.dataset.video)}" title="${esc(tile.dataset.title || 'Video')}"
-    allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen
-    referrerpolicy="no-referrer"></iframe>`;
-  if (frameSizer) frameSizer.observe(frame);
-  else sizePlayer(frame);
+
+  if (tile.dataset.source === 'cloudinary') {
+    /*
+      Cloudinary plays in the browser's own player. It only arrives when the
+      play button is pressed (see the click handler), so it starts at once —
+      f_auto,q_auto ask Cloudinary for the best format and quality this
+      browser can take.
+    */
+    const video = document.createElement('video');
+    video.src = cloudinaryFit(tile.dataset.video);
+    video.poster = tile.querySelector('.media-thumb')?.currentSrc || '';
+    video.controls = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+    video.setAttribute('aria-label', tile.dataset.title || 'Video');
+    frame.replaceChildren(video);
+  } else {
+    frame.innerHTML = `<iframe src="${driveEmbed(tile.dataset.video)}" title="${esc(tile.dataset.title || 'Video')}"
+      allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen
+      referrerpolicy="no-referrer"></iframe>`;
+    if (frameSizer) frameSizer.observe(frame);
+    else sizePlayer(frame);
+  }
 
   livePlayers.add(tile);
   if (livePlayers.size <= LIVE_LIMIT) return;
@@ -1783,7 +1844,10 @@ const videoObserver = 'IntersectionObserver' in window
       for (const entry of entries) {
         const tile = entry.target;
         tile.dataset.inView = String(entry.isIntersecting);
-        if (entry.isIntersecting) {
+        /* A Drive player is loaded ahead of time so a single press plays it.
+           A Cloudinary one needs no warming up, so it waits to be pressed and
+           a page of posters costs nothing to scroll past. */
+        if (entry.isIntersecting && tile.dataset.source !== 'cloudinary') {
           laterFor(tile, () => {
             if (tile.isConnected && tile.dataset.inView === 'true') hydrateVideo(tile);
           }, 800);
@@ -1878,7 +1942,17 @@ document.addEventListener('click', (event) => {
   const tile = play.closest('.media--video');
   if (tile) tile.dataset.engaged = 'true';
   hydrateVideo(tile);
+  // Still inside the press, so the browser lets it start with sound.
+  tile?.querySelector('.media-frame video')?.play()?.catch(() => { /* the controls are there */ });
 });
+
+/* One of our own players at a time: starting one pauses whichever was playing.
+   (A Drive player can't be paused from here — it's Google's page, not ours.) */
+document.addEventListener('play', (event) => {
+  const started = event.target;
+  if (!(started instanceof HTMLVideoElement) || !started.closest('.media--video')) return;
+  $$('.media--video .media-frame video').forEach((video) => { if (video !== started) video.pause(); });
+}, true);
 
 // Pressing into a player moves focus into its frame, which blurs the window.
 // That player is the one being watched — keep it through any eviction.
@@ -2101,6 +2175,9 @@ function mountCarousel(root) {
   const next = $('.carousel-nav', root);
   if (!track || !track.clientWidth) return;          // hidden — mounted on open
   root.dataset.mounted = 'true';
+  // A sideways trackpad swipe scrolls the row; an up-and-down one still
+  // scrolls the page, smoothly (see Lenis).
+  track.setAttribute('data-lenis-prevent-horizontal', '');
 
   const wantsLoop = track.dataset.autoscroll === 'true' && !prefersReducedMotion();
   const looping = wantsLoop && track.scrollWidth > track.clientWidth + 8;
@@ -2302,6 +2379,7 @@ function openNavMenu() {
 
   const menu = document.createElement('div');
   menu.className = 'nav-menu';
+  menu.setAttribute('data-lenis-prevent', '');
   menu.setAttribute('role', 'dialog');
   menu.setAttribute('aria-modal', 'true');
   menu.setAttribute('aria-label', 'Site menu');
@@ -2326,12 +2404,8 @@ function openNavMenu() {
     <div class="nav-menu-foot">
       <span class="micro">Appearance</span>
       ${themeToggleButton()}
-      <!--
-        LOGIN BUTTON — DO NOT BUILD UNTIL EXPLICITLY ASKED.
-        Phase 9 fills this slot with a "Login" pill linking to the CRM app.
-      -->
-      <div class="nav-login-slot"></div>
-    </div>`;
+    </div>
+    <div class="nav-menu-login">${loginLink('btn btn--gold nav-menu-login-btn')}</div>`;
 
   applyCopy(menu);
 
@@ -2362,6 +2436,7 @@ function openNavMenu() {
     menu.remove();
     document.removeEventListener('keydown', onKey);
     document.body.style.overflow = '';
+    resumeScrolling();
     toggle?.setAttribute('aria-expanded', 'false');
     toggle?.focus();
   }
@@ -2379,6 +2454,7 @@ function openNavMenu() {
   document.addEventListener('keydown', onKey);
   document.body.append(menu);
   document.body.style.overflow = 'hidden';
+  pauseScrolling();
   toggle?.setAttribute('aria-expanded', 'true');
   $('[data-menu-close]', menu).focus();
 }
@@ -2987,13 +3063,13 @@ const CLIENT_FIELDS = [
   { name: 'isCaseStudy', label: 'Show in Case studies', type: 'checkbox' },
   {
     name: 'selectedReel', label: 'Selected reel', type: 'text',
-    hint: 'The reel shown for this client on Our Work — a Google Drive link, either one of their videos below or a separate upload. Leave blank to use their first video. It is left out of their carousel, so it never shows twice.',
+    hint: 'The reel shown for this client on Our Work — a Google Drive or Cloudinary video link, either one of their videos below or a separate upload. Leave blank to use their first video. It is left out of their carousel, so it never shows twice.',
   },
   {
     name: 'videos', label: 'Videos', type: 'rows',
     columns: [
       { key: 'title', label: 'Title' },
-      { key: 'driveFileId', label: 'Drive file ID or share link' },
+      { key: 'driveFileId', label: 'Video link (Google Drive or Cloudinary)' },
       { key: 'kind', label: 'reel / bts' },
     ],
   },
@@ -3096,7 +3172,7 @@ function mountEditHandlers() {
         name: 'hiringGallery', label: 'Behind the scenes', type: 'rows',
         columns: [
           { key: 'imageUrl', label: 'Image URL' },
-          { key: 'driveFileId', label: 'or Drive file ID' },
+          { key: 'driveFileId', label: 'or a video link (Drive or Cloudinary)' },
           { key: 'caption', label: 'Caption' },
         ],
       }],
@@ -3239,6 +3315,600 @@ async function openSubmissionsList() {
   });
 }
 
+/* ================================================= Scrolling and cursor === */
+
+/*
+  Two things live here, ported from the Edgware Youth site so the two scroll
+  and point the same way:
+
+    Lenis   — smooth scrolling: the wheel eases the page instead of jumping it
+    Cursor  — a small circle that follows the pointer, gold, which swaps to the
+              page's background colour whenever it's over something too close
+              to gold to stand out against
+
+  Both are for a computer with a mouse only. On a phone or tablet they never
+  start: the phone's own momentum scrolling is better than anything we'd add,
+  and there's no pointer to follow. They also stay off for anyone who has
+  asked their device to reduce motion. `prefersReducedMotion()` is checked live,
+  because the setting can change without a reload.
+*/
+
+/** True on a phone or tablet: no hover, and a finger rather than a pointer. */
+const isTouchDevice = () =>
+  window.matchMedia('(hover: none)').matches || window.matchMedia('(pointer: coarse)').matches;
+
+/** The one gate both behaviours go through. */
+const motionAllowed = () => !prefersReducedMotion() && !isTouchDevice();
+
+/* ------------------------------------------------------------ Lenis ------ */
+
+/*
+  Lenis catches the mouse wheel and eases the page to where the wheel was
+  sending it, which is what gives the scroll its weight. It moves the real
+  scroll position, so everything that listens for scrolling — the nav, the
+  hero parallax, the reveals — carries on working untouched.
+
+  The library (vendor/lenis.min.js, 18 KB) is only downloaded when it will be
+  used. If it fails to load, the page simply scrolls the ordinary way.
+
+  Things that scroll on their own are marked so Lenis leaves them be:
+    data-lenis-prevent             dialogs and the menu, which scroll inside
+    data-lenis-prevent-horizontal  carousels: a sideways swipe stays theirs,
+                                   while an up-and-down one still moves the page
+*/
+let lenis = null;
+
+function loadScript(src) {
+  return new Promise((resolve) => {
+    const tag = document.createElement('script');
+    tag.src = src;
+    tag.onload = resolve;
+    tag.onerror = () => {
+      console.warn(`[motion] ${src} did not load — the page scrolls normally instead.`);
+      resolve();
+    };
+    document.head.append(tag);
+  });
+}
+
+async function mountLenis() {
+  if (lenis || !motionAllowed()) return;
+  if (!window.Lenis) await loadScript('/vendor/lenis.min.js');
+  if (lenis || !window.Lenis || !motionAllowed()) return;
+  lenis = new window.Lenis({ autoRaf: true });   // the defaults, same as Edgware Youth
+  // A dialog or the menu may already be open: the page behind stays put.
+  if (document.querySelector('.modal-backdrop, .nav-menu')) lenis.stop();
+}
+
+function destroyLenis() {
+  lenis?.destroy();
+  lenis = null;
+}
+
+/*
+  While a dialog or the menu is open the page behind it must not move. Setting
+  overflow: hidden (which the dialogs do) doesn't stop Lenis — it moves the
+  page itself — so it is paused as well, and resumed on close.
+*/
+const pauseScrolling = () => lenis?.stop();
+const resumeScrolling = () => lenis?.start();
+
+/**
+ * Scroll to a position or an element. Goes through Lenis when it's running —
+ * a plain window.scrollTo mid-glide would be pulled straight back to where
+ * Lenis was heading.
+ */
+function scrollToTarget(target, { immediate = false } = {}) {
+  if (lenis) {
+    lenis.scrollTo(target, { immediate });
+    return;
+  }
+  const behavior = immediate || prefersReducedMotion() ? 'auto' : 'smooth';
+  if (typeof target === 'number') window.scrollTo({ top: target, behavior });
+  else target?.scrollIntoView({ behavior });
+}
+
+/* ----------------------------------------------------------- Cursor ------ */
+
+/*
+  A 16px circle that chases the pointer, replacing the arrow — the same one
+  as Edgware Youth. Each frame it travels 15% of the remaining distance to the
+  mouse, which gives the slight lag that makes it feel like an object rather
+  than a sprite stuck to the pointer (--cursor-lerp in styles.css). Over
+  anything you can click it grows (--cursor-grow).
+
+  ITS COLOUR. It is one of the site's two colours: gold, or the page's own
+  background colour (near-black in dark mode, cream in light). It is gold
+  unless gold wouldn't stand out against what's underneath — a gold button,
+  the glowing hand in the hero, the light half of the intro film — and then
+  it swaps to the background colour. Edgware Youth marks its one dark band by
+  hand; this site has gold in too many places for that, so the circle works
+  out the colour under itself:
+
+    - it looks at every layer under the pointer, top to bottom, and blends
+      their backgrounds together the way the browser paints them (a
+      see-through glass card lets the page show through, a gold button
+      doesn't)
+    - where a layer is a picture or video it can read — the intro film, the
+      hero's glowing hand — it reads the actual pixel under the pointer
+    - where the layer is a CSS gradient (the hero's shaft of light and orange
+      bloom), it works out the gradient's colour at that exact point
+    - then it compares that colour with gold. If gold would be too close to
+      it (a contrast ratio under 3), the other colour is used, provided that
+      one does stand out better.
+
+  Pictures from other sites (the Google Drive and Cloudinary posters) can't be
+  read — the browser forbids it — so over those it stays gold, which shows up
+  well over photos anyway.
+
+  Anything can force a colour with data-cursor="gold" or data-cursor="alt".
+  A picture or video that sits behind the page's content, where the pointer
+  can't reach it, is read when marked data-cursor-sample (the hero hand is).
+*/
+let cursorTeardown = null;
+
+/** "rgb(…)", "rgba(…)" or "color(srgb …)" → [r, g, b, alpha]. */
+function parseColour(text) {
+  const alpha = (value) => (value == null ? 1 : value.endsWith('%') ? parseFloat(value) / 100 : parseFloat(value));
+  let match = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)/i.exec(text);
+  if (match) return [+match[1], +match[2], +match[3], alpha(match[4])];
+  match = /color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+%?))?\s*\)/i.exec(text);
+  if (match) return [match[1] * 255, match[2] * 255, match[3] * 255, alpha(match[4])];
+  return null;
+}
+
+const hexColour = (hex) => {
+  const value = String(hex).trim().replace('#', '');
+  const full = value.length === 3 ? value.replace(/./g, (c) => c + c) : value;
+  return [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16));
+};
+
+/** WCAG relative luminance and contrast ratio — the same maths as the contrast checks in the README. */
+function luminance([r, g, b]) {
+  const lin = (c) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+function contrast(a, b) {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** Paint `top` (with its alpha) over `under`, as the browser would. */
+const over = (under, top) => under.map((c, i) => (i < 3 ? c + (top[i] - c) * top[3] : 1));
+
+/** Screen blend at an opacity — how the hero's glowing hand is composited. */
+const screen = (under, top, opacity) => under.map((c, i) => {
+  if (i > 2) return 1;
+  const blended = 255 - ((255 - c) * (255 - top[i])) / 255;
+  return c + (blended - c) * opacity;
+});
+
+/** Paint `top` over `under` where BOTH may be see-through (within one element's layers). */
+function overAlpha(under, top) {
+  const a = top[3] + under[3] * (1 - top[3]);
+  if (a <= 0) return [0, 0, 0, 0];
+  const mix = (i) => (top[i] * top[3] + under[i] * under[3] * (1 - top[3])) / a;
+  return [mix(0), mix(1), mix(2), a];
+}
+
+/** Split "a, b(c, d), e" at the top-level commas only. */
+function splitTopLevel(text) {
+  const parts = [];
+  let depth = 0;
+  let from = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] === '(') depth += 1;
+    else if (text[i] === ')') depth -= 1;
+    else if (text[i] === ',' && depth === 0) { parts.push(text.slice(from, i).trim()); from = i + 1; }
+  }
+  parts.push(text.slice(from).trim());
+  return parts.filter(Boolean);
+}
+
+/*
+  CSS GRADIENTS, WORKED OUT AT A POINT.
+
+  The hero's glow — the shaft of light and the orange bloom — is painted by
+  stacked CSS gradients rather than a picture, so there is nothing to "read".
+  But a gradient is just a rule: at any point, its colour follows from the
+  stops. These few functions apply that rule the same way the browser does
+  (linear and radial gradients, percentage and pixel stops, blending
+  see-through stops the way CSS does), which tells the cursor exactly what
+  colour the glow is under it. Anything unusual it can't follow falls back to
+  the average of the gradient's colours.
+*/
+function gradientStops(args, length) {
+  const stops = [];
+  for (const part of args) {
+    const colourText = /^(rgba?\([^)]*\)|color\(srgb[^)]*\))/i.exec(part)?.[1];
+    const colour = colourText && parseColour(colourText);
+    if (!colour) return null;
+    const positions = [...part.slice(colourText.length).matchAll(/(-?[\d.]+)(%|px)/g)]
+      .map(([, value, unit]) => (unit === '%' ? value / 100 : value / length));
+    if (!positions.length) stops.push({ colour, at: null });
+    positions.forEach((at) => stops.push({ colour, at }));
+  }
+  if (stops.length < 2) return null;
+  // Missing positions: first 0, last 1, the rest spread evenly between known ones.
+  if (stops[0].at == null) stops[0].at = 0;
+  if (stops[stops.length - 1].at == null) stops[stops.length - 1].at = 1;
+  for (let i = 1; i < stops.length; i += 1) {
+    if (stops[i].at != null) continue;
+    let j = i;
+    while (stops[j].at == null) j += 1;
+    const from = stops[i - 1].at;
+    const step = (stops[j].at - from) / (j - i + 1);
+    for (let k = i; k < j; k += 1) stops[k].at = from + step * (k - i + 1);
+  }
+  // A stop can never sit before the one ahead of it.
+  for (let i = 1; i < stops.length; i += 1) stops[i].at = Math.max(stops[i].at, stops[i - 1].at);
+  return stops;
+}
+
+function colourAlong(stops, t) {
+  if (t <= stops[0].at) return stops[0].colour;
+  const last = stops[stops.length - 1];
+  if (t >= last.at) return last.colour;
+  const i = stops.findIndex((stop) => stop.at >= t);
+  const a = stops[i - 1];
+  const b = stops[i];
+  const f = b.at === a.at ? 1 : (t - a.at) / (b.at - a.at);
+  // CSS blends through see-through stops without dragging their colour in.
+  const alpha = a.colour[3] + (b.colour[3] - a.colour[3]) * f;
+  if (alpha <= 0) return [0, 0, 0, 0];
+  const channel = (k) => (a.colour[k] * a.colour[3] + (b.colour[k] * b.colour[3] - a.colour[k] * a.colour[3]) * f) / alpha;
+  return [channel(0), channel(1), channel(2), alpha];
+}
+
+function gradientAt(layer, box, x, y) {
+  const match = /^(repeating-)?(linear|radial)-gradient\((.*)\)$/is.exec(layer);
+  if (!match) return null;
+  const [, repeating, kind, inner] = match;
+  const args = splitTopLevel(inner);
+  const w = box.width;
+  const h = box.height;
+  const px = x - box.left;
+  const py = y - box.top;
+  let t;
+  let length;
+
+  if (kind.toLowerCase() === 'linear') {
+    let angle = Math.PI;   // "to bottom", the default
+    const head = args[0];
+    if (/^-?[\d.]+(deg|rad|turn|grad)$/i.test(head)) {
+      const value = parseFloat(head);
+      angle = /rad/i.test(head) ? value : /turn/i.test(head) ? value * 2 * Math.PI
+        : /grad/i.test(head) ? (value * Math.PI) / 200 : (value * Math.PI) / 180;
+      args.shift();
+    } else if (/^to /i.test(head)) {
+      const side = head.toLowerCase();
+      const top = side.includes('top');
+      const bottom = side.includes('bottom');
+      const left = side.includes('left');
+      const right = side.includes('right');
+      if ((top || bottom) && (left || right)) angle = Math.atan2(right ? h : -h, top ? w : -w);
+      else angle = top ? 0 : right ? Math.PI / 2 : left ? (3 * Math.PI) / 2 : Math.PI;
+      args.shift();
+    }
+    const sin = Math.sin(angle);
+    const cos = Math.cos(angle);
+    length = Math.abs(w * sin) + Math.abs(h * cos);
+    t = 0.5 + ((px - w / 2) * sin - (py - h / 2) * cos) / length;
+  } else {
+    let rx = null;
+    let ry = null;
+    let cx = w / 2;
+    let cy = h / 2;
+    if (!/^(rgba?|color)\(/i.test(args[0])) {
+      const head = args.shift();
+      const [size, at] = head.split(/\s+at\s+/i);
+      const toPx = (token, of) => (token.endsWith('%') ? (parseFloat(token) / 100) * of : parseFloat(token));
+      if (at) {
+        const [ax = '50%', ay = '50%'] = at.trim().split(/\s+/).map((token) =>
+          ({ left: '0%', center: '50%', right: '100%', top: '0%', bottom: '100%' }[token] ?? token));
+        cx = toPx(ax, w);
+        cy = toPx(ay, h);
+      }
+      const lengths = (size || '').trim().split(/\s+/).filter((token) => /[\d.]+(%|px)$/.test(token));
+      if (lengths.length === 2) { rx = toPx(lengths[0], w); ry = toPx(lengths[1], h); }
+      else if (lengths.length === 1) { rx = ry = toPx(lengths[0], w); }
+    }
+    if (rx == null) {
+      // The default size, farthest-corner, for an ellipse.
+      rx = Math.max(cx, w - cx) * Math.SQRT2;
+      ry = Math.max(cy, h - cy) * Math.SQRT2;
+    }
+    if (!rx || !ry) return null;
+    length = rx;
+    t = Math.hypot((px - cx) / rx, (py - cy) / ry);
+  }
+
+  const stops = gradientStops(args, length);
+  if (!stops) return null;
+  if (repeating) {
+    const span = stops[stops.length - 1].at - stops[0].at;
+    if (span > 0) t = stops[0].at + ((((t - stops[0].at) % span) + span) % span);
+  }
+  return colourAlong(stops, t);
+}
+
+/**
+ * What one element paints behind its content at a point: its background
+ * colour with every gradient layer on top, in the browser's order (the first
+ * layer listed is the one on top).
+ */
+function backgroundOf(el, x, y) {
+  const style = getComputedStyle(el);
+  // Gradient text (the display headings) paints its gradient into the letters, not behind them.
+  if (/text/.test(style.backgroundClip || style.webkitBackgroundClip || '')) return null;
+  let colour = parseColour(style.backgroundColor) || [0, 0, 0, 0];
+  const image = style.backgroundImage;
+  if (image && image !== 'none') {
+    const box = el.getBoundingClientRect();
+    for (const layer of splitTopLevel(image).reverse()) {
+      if (!/gradient\(/i.test(layer)) continue;   // a url() picture: can't be read
+      let painted = gradientAt(layer, box, x, y);
+      if (!painted) {
+        const stops = (layer.match(/rgba?\([^)]*\)|color\(srgb[^)]*\)/gi) || []).map(parseColour).filter(Boolean);
+        if (!stops.length) continue;
+        painted = stops.reduce((acc, c) => acc.map((v, i) => v + c[i] / stops.length), [0, 0, 0, 0]);
+      }
+      colour = overAlpha(colour, painted);
+    }
+  }
+  return colour[3] > 0.02 ? colour : null;
+}
+
+/*
+  Reading one pixel of a picture, video or canvas. Only our own files can be
+  read; a picture from another site would "taint" the reading canvas, so those
+  are skipped before they are ever drawn.
+*/
+const probe = document.createElement('canvas');
+probe.width = probe.height = 1;
+let probeCtx = probe.getContext('2d', { willReadFrequently: true });
+const unreadable = new WeakSet();
+
+function sameOrigin(src) {
+  try { return new URL(src, location.href).origin === location.origin; } catch { return false; }
+}
+
+function pixelAt(el, x, y) {
+  if (!probeCtx || unreadable.has(el)) return null;
+  const box = el.getBoundingClientRect();
+  if (!box.width || !box.height) return null;
+  try {
+    if (el instanceof HTMLCanvasElement) {
+      const u = (x - box.left) / box.width;
+      const v = (y - box.top) / box.height;
+      if (u < 0 || v < 0 || u >= 1 || v >= 1) return null;
+      const data = el.getContext('2d')?.getImageData(Math.floor(u * el.width), Math.floor(v * el.height), 1, 1).data;
+      return data ? [data[0], data[1], data[2], data[3] / 255] : null;
+    }
+    let width;
+    let height;
+    if (el instanceof HTMLVideoElement) {
+      if (el.readyState < 2 || !sameOrigin(el.currentSrc)) return null;
+      width = el.videoWidth;
+      height = el.videoHeight;
+    } else if (el instanceof HTMLImageElement) {
+      if (!el.complete || !el.naturalWidth || (!sameOrigin(el.currentSrc) && !el.crossOrigin)) return null;
+      width = el.naturalWidth;
+      height = el.naturalHeight;
+    } else {
+      return null;
+    }
+    // Where in the picture this point falls, allowing for object-fit.
+    const fit = getComputedStyle(el).objectFit;
+    const scale = fit === 'cover' ? Math.max(box.width / width, box.height / height)
+      : fit === 'contain' || fit === 'scale-down' ? Math.min(box.width / width, box.height / height)
+      : null;
+    const px = scale ? (x - box.left - (box.width - width * scale) / 2) / scale : ((x - box.left) / box.width) * width;
+    const py = scale ? (y - box.top - (box.height - height * scale) / 2) / scale : ((y - box.top) / box.height) * height;
+    if (px < 0 || py < 0 || px >= width || py >= height) return null;
+    probeCtx.clearRect(0, 0, 1, 1);
+    probeCtx.drawImage(el, px, py, 1, 1, 0, 0, 1, 1);
+    const data = probeCtx.getImageData(0, 0, 1, 1).data;
+    return [data[0], data[1], data[2], data[3] / 255];
+  } catch {
+    // It turned out unreadable after all: never try it again, and start a
+    // fresh reading canvas in case this one was tainted by the attempt.
+    unreadable.add(el);
+    const fresh = document.createElement('canvas');
+    fresh.width = fresh.height = 1;
+    probeCtx = fresh.getContext('2d', { willReadFrequently: true });
+    return null;
+  }
+}
+
+/**
+ * The colour on screen under a point — or null when it can't be known (a
+ * picture from another site, or a video player). Also reports any explicit
+ * data-cursor choice.
+ */
+function colourUnder(x, y, pageBg) {
+  const stack = document.elementsFromPoint(x, y).filter((el) => !el.classList.contains('cursor'));
+  const forced = stack[0]?.closest('[data-cursor]')?.dataset.cursor;
+  if (forced === 'gold' || forced === 'alt') return { forced };
+
+  // Top to bottom, collecting layers until one is solid.
+  const layers = [];
+  for (const el of stack) {
+    if (el.tagName === 'IFRAME') return null;
+    const media = el instanceof HTMLImageElement || el instanceof HTMLVideoElement || el instanceof HTMLCanvasElement;
+    const colour = media ? pixelAt(el, x, y) : backgroundOf(el, x, y);
+    if (media && !colour && el.tagName !== 'CANVAS') return null;   // a picture we can't read
+    if (!colour) continue;
+    layers.push({ el, colour });
+    if (colour[3] >= 0.95) break;
+  }
+
+  /*
+    Layers the pointer passes straight through — the hero's glow and its
+    glowing hand — are marked data-cursor-sample. They paint above whichever
+    solid layer holds them and below anything on top of that, in their own
+    stacking order.
+  */
+  const firstSolid = layers.findIndex((layer) => layer.colour[3] >= 0.5);
+  const holder = firstSolid === -1 ? null : layers[firstSolid].el;
+  const behind = [...document.querySelectorAll('[data-cursor-sample]')]
+    .filter((el) => {
+      const box = el.getBoundingClientRect();
+      return x >= box.left && x < box.right && y >= box.top && y < box.bottom
+        && (!holder || (holder !== el && holder.contains(el)));
+    })
+    .map((el) => ({ el, style: getComputedStyle(el) }))
+    .sort((a, b) => ((parseInt(a.style.zIndex, 10) || 0) - (parseInt(b.style.zIndex, 10) || 0))
+      || (a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+
+  let colour = [...pageBg, 1];
+  const paintBehind = () => {
+    for (const { el, style } of behind) {
+      const media = el instanceof HTMLImageElement || el instanceof HTMLVideoElement || el instanceof HTMLCanvasElement;
+      const paint = media ? pixelAt(el, x, y) : backgroundOf(el, x, y);
+      if (!paint) continue;
+      const opacity = Number(style.opacity) * paint[3];
+      colour = style.mixBlendMode === 'screen'
+        ? screen(colour, paint, opacity)
+        : over(colour, [paint[0], paint[1], paint[2], opacity]);
+    }
+  };
+  if (firstSolid === -1) paintBehind();
+  for (let i = layers.length - 1; i >= 0; i -= 1) {
+    colour = over(colour, layers[i].colour);
+    if (i === firstSolid) paintBehind();
+  }
+  return { colour };
+}
+
+function mountCursor() {
+  if (cursorTeardown || !motionAllowed()) return;
+
+  const root = document.documentElement;
+  const tokens = getComputedStyle(root);
+  const LERP = Number(tokens.getPropertyValue('--cursor-lerp')) || 0.15;
+  const GROW = Number(tokens.getPropertyValue('--cursor-grow')) || 2.5;
+  /*
+    3:1 is the contrast the accessibility guidelines (WCAG 1.4.11) ask of
+    anything you need to see that isn't text — the right bar for a pointer.
+    Once swapped, it only swaps back when gold is clearly readable again
+    (3.3), so it doesn't flicker at the edge of the moving glow.
+  */
+  const SWAP_BELOW = 3;
+  const SWAP_BACK_ABOVE = 3.3;
+
+  const dot = document.createElement('div');
+  dot.className = 'cursor';
+  dot.setAttribute('aria-hidden', 'true');
+  dot.dataset.ready = 'false';
+  dot.dataset.tone = 'gold';
+  document.body.append(dot);
+  root.dataset.cursor = 'on';
+
+  let mouseX = window.innerWidth / 2;
+  let mouseY = window.innerHeight / 2;
+  let x = mouseX;
+  let y = mouseY;
+  let scale = 1;
+  let targetScale = 1;
+  let frame = 0;
+  let lastCheck = 0;
+  let moved = false;
+
+  /* The two colours, read from the theme — they change with it. */
+  const palette = () => {
+    const style = getComputedStyle(root);
+    return { gold: hexColour(style.getPropertyValue('--gold-1')), alt: hexColour(style.getPropertyValue('--bg')) };
+  };
+
+  function checkUnder() {
+    const under = document.elementFromPoint(mouseX, mouseY);
+    targetScale = under?.closest('a, button, label, summary, select, [role="button"], [data-cursor-grow]') ? GROW : 1;
+
+    const { gold, alt } = palette();
+    const found = colourUnder(mouseX, mouseY, alt);
+    let tone = 'gold';
+    if (found?.forced) tone = found.forced;
+    else if (found?.colour) {
+      const goldContrast = contrast(gold, found.colour);
+      const limit = dot.dataset.tone === 'alt' ? SWAP_BACK_ABOVE : SWAP_BELOW;
+      if (goldContrast < limit && contrast(alt, found.colour) > goldContrast) tone = 'alt';
+    }
+    dot.dataset.tone = tone;
+  }
+
+  const onMove = (event) => {
+    mouseX = event.clientX;
+    mouseY = event.clientY;
+    moved = true;
+    if (dot.dataset.ready === 'false') {
+      // First move (or back from outside the window): appear where the pointer
+      // is, rather than flying in from wherever it was last.
+      x = mouseX;
+      y = mouseY;
+      checkUnder();   // the right colour from its very first frame
+      dot.dataset.ready = 'true';
+    }
+  };
+  const hide = () => { dot.dataset.ready = 'false'; };
+  // A video player is someone else's page in a frame: the pointer disappears
+  // into it, and inside it the browser shows its own arrow. Step aside.
+  const onOver = (event) => { if (event.target.tagName === 'IFRAME') hide(); };
+
+  const tick = (now) => {
+    x += (mouseX - x) * LERP;
+    y += (mouseY - y) * LERP;
+    scale += (targetScale - scale) * LERP;
+    dot.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${scale})`;
+    /* What's underneath is re-read when the pointer moves, and every few
+       frames regardless — the page scrolls under a still pointer, and the
+       film and the hand are moving pictures. */
+    if (dot.dataset.ready === 'true' && (now - lastCheck > (moved ? 50 : 150))) {
+      lastCheck = now;
+      moved = false;
+      checkUnder();
+    }
+    frame = requestAnimationFrame(tick);
+  };
+
+  window.addEventListener('pointermove', onMove, { passive: true });
+  root.addEventListener('mouseleave', hide);
+  document.addEventListener('pointerover', onOver);
+  frame = requestAnimationFrame(tick);
+
+  cursorTeardown = () => {
+    cancelAnimationFrame(frame);
+    window.removeEventListener('pointermove', onMove);
+    root.removeEventListener('mouseleave', hide);
+    document.removeEventListener('pointerover', onOver);
+    dot.remove();
+    delete root.dataset.cursor;
+    cursorTeardown = null;
+  };
+}
+
+function destroyCursor() {
+  cursorTeardown?.();
+}
+
+/*
+  Someone can turn on "reduce motion", or plug in a mouse, without reloading.
+  Start or stop both to match.
+*/
+function watchMotionPreference() {
+  const sync = () => {
+    if (motionAllowed()) {
+      mountLenis();
+      mountCursor();
+    } else {
+      destroyLenis();
+      destroyCursor();
+    }
+  };
+  ['(prefers-reduced-motion: reduce)', '(hover: none)', '(pointer: coarse)']
+    .forEach((query) => window.matchMedia(query).addEventListener('change', sync));
+}
+
 /* ============================================================ Loader ====== */
 
 /*
@@ -3369,7 +4039,10 @@ async function boot() {
   }
 
   await renderRoute(window.location.pathname);
+  mountCursor();
   await playLoader();
+  mountLenis();
+  watchMotionPreference();
   playThemeNotice();
 }
 

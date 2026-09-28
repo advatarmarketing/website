@@ -287,6 +287,53 @@ Tokens live at the top of `styles.css`.
   hover displacement is removed. Reveals also short-circuit if `IntersectionObserver` is
   missing, so content can never be left invisible.
 
+### Smooth scrolling and the cursor
+
+Both come from the Edgware Youth site, so the two sites scroll and point the same way.
+Both are **only on a computer with a mouse**: on a phone or tablet neither is even
+downloaded (the phone's own scrolling is better than anything we'd add, and there's no
+pointer to follow), and both stay off for anyone whose device is set to reduce motion.
+
+**Smooth scrolling** is Lenis (`vendor/lenis.min.js` — see `vendor/README.txt`). The mouse
+wheel eases the page instead of jumping it. A few places are marked so Lenis leaves them
+alone:
+
+- dialogs and the menu scroll themselves, and the page behind them stays still;
+- carousels keep a **sideways** swipe for themselves, while an up-and-down scroll over them
+  still moves the page;
+- a video player stops catching the pointer only while the page is actually gliding, so a
+  scroll doesn't stop dead at every reel — and is clickable again the moment it settles.
+
+**The cursor** is a small circle that follows the pointer with a slight, weighty lag, and
+grows over anything you can click. It is always one of the site's two colours: **gold**,
+or the page's **background colour** (near-black in dark mode, cream in light). It stays
+gold unless gold wouldn't stand out against what's underneath it — the gold buttons, the
+hero's orange glow and glowing hand, the light half of the intro film — and then swaps.
+
+It works out the colour under itself rather than relying on hand-placed markers, because
+gold appears in too many places here to mark them all:
+
+- it looks at every layer under the pointer and blends them the way the browser paints them
+  (a see-through glass card lets the page show through; a gold button doesn't);
+- for the site's own pictures and videos (the intro film, the hero hand) it reads the actual
+  pixel;
+- for CSS gradients (the hero's shaft of light and orange bloom) it calculates the colour at
+  that exact point — checked against real screenshots, it lands within a few shades;
+- if gold's contrast against that colour is **below 3:1** — the minimum the accessibility
+  guidelines ask for anything you need to see — it swaps, provided the other colour does
+  better. It swaps back only once gold is clearly readable again (3.3:1), so it doesn't
+  flicker at the edge of the moving glow.
+
+Pictures from other sites (Google Drive and Cloudinary posters) can't be read — browsers
+forbid it — so over those it stays gold, which shows up well on photos. Inside a Drive player
+the circle steps aside and the ordinary arrow takes over. Over a text box the normal text
+cursor comes back, so typing still feels right.
+
+To force a colour somewhere, add `data-cursor="gold"` or `data-cursor="alt"` to it. A picture
+behind the page's content (where the pointer can't reach it) is read if it's marked
+`data-cursor-sample`, as the hero's glow and hand are. Size, growth and lag are
+`--cursor-size`, `--cursor-grow` and `--cursor-lerp` at the top of `styles.css`.
+
 ## Clients
 
 `data/seed.json` carries 48 clients across 9 categories, deduplicated from both tabs of the
@@ -306,7 +353,29 @@ the headline always sits on dark ground. Supplying `heroVideoDesktopUrl` /
 
 ## Videos
 
-Client videos are Google Drive files that **play inline, right in their tile** — one press
+Every video field in edit mode — a client's videos, their **Selected reel**, and the hiring
+gallery — takes either kind of link:
+
+- a **Google Drive** share link (or file id), as before, or
+- a **Cloudinary** video link: the `res.cloudinary.com/…/video/…` address from **Copy URL**
+  in the media library. The link from Cloudinary's *video player* embed code works too; it
+  is turned into the plain video link when saved. A Cloudinary *image* link is refused, so a
+  picture can't be saved as a video by mistake.
+
+**Cloudinary is the better home for reels.** It plays in the browser's own video player, so
+there's no Drive page loaded around each one, and no Drive viewing limit to hit (see below).
+The poster is the video's first frame, made by Cloudinary on request — nothing extra to
+upload — and the player only loads when someone presses play, so a page full of posters
+costs nothing to scroll past. It's asked for in the best format and quality for each
+browser (`f_auto,q_auto`). Starting one Cloudinary video pauses any other that's playing.
+
+Drive and Cloudinary videos can be mixed freely, even in the same client's list. The field is
+still called `driveFileId` in the data because every video saved before now is stored under
+that name; renaming it would mean moving all of them.
+
+The rest of this section is about **Google Drive** videos.
+
+Client videos on Drive **play inline, right in their tile** — one press
 on the player plays it, and fullscreen is in the player's own controls. There is no pop-up.
 
 - Each tile shows the poster (the sharp frame over a blurred fill of itself). As the tile
@@ -362,8 +431,15 @@ scrolling down the page.
   Leave it blank and their first video is used. It also leads their Selected reels and
   Recent Wins cards.
 
-## Not built
+## Login
 
-Phase 9 (the **Login** button linking to the CRM) is deliberately not built. The nav slot
-is reserved and marked in both `app.js` and `styles.css` with
-`LOGIN BUTTON — DO NOT BUILD UNTIL EXPLICITLY ASKED`.
+A **Login** button links to Advatar's client app at **https://app.advatar.co.uk**. It's an
+ordinary link to that site — nothing about logging in happens on this one.
+
+- **Top right** of the bar, beside the light/dark switch.
+- **On a phone** there isn't room for it next to the logo and both buttons, so it moves into
+  the menu instead, as the gold button at the bottom.
+- **In the footer**, as "Client login" under the email address.
+
+The address is set once, as `LOGIN_URL` near the top of `app.js`. Both labels can be
+reworded in edit mode like any other text.

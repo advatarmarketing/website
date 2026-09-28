@@ -1,6 +1,6 @@
 import { get, set } from '../lib/kv.js';
 import { seedFor } from '../lib/seed.js';
-import { ok, badRequest, methodNotAllowed, readBody, clean, cleanUrl, withErrors } from '../lib/http.js';
+import { ok, badRequest, methodNotAllowed, readBody, clean, cleanUrl, cleanVideoRef, withErrors } from '../lib/http.js';
 import { requireAuth } from '../lib/auth.js';
 
 /** Digits only — wa.me wants an international number with no +, spaces or dashes. */
@@ -59,11 +59,10 @@ function sanitize(settings) {
     hiringGallery: (Array.isArray(input.hiringGallery) ? input.hiringGallery : [])
       .slice(0, 24)
       .map((entry) => ({
-        // A gallery entry is either an image URL or a Drive video id.
+        // A gallery entry is either an image URL or a video: a Drive id or a
+        // Cloudinary link (see cleanVideoRef).
         imageUrl: cleanUrl(entry?.imageUrl),
-        driveFileId: /^[A-Za-z0-9_-]{10,}$/.test(clean(entry?.driveFileId, 200))
-          ? clean(entry.driveFileId, 200)
-          : '',
+        driveFileId: cleanVideoRef(entry?.driveFileId),
         caption: clean(entry?.caption, 120),
       }))
       .filter((entry) => entry.imageUrl || entry.driveFileId),
