@@ -523,8 +523,24 @@ function cloudinaryPoster(url, width) {
 function cloudinaryVideo(url, transform) {
   const [path] = String(url).split(/[?#]/);
   return path.replace(/\/video\/(upload|authenticated|private)\//i,
-    (match) => `${match}${transform}/f_auto,q_auto/`);
+    (match) => `${match}${transform}/${VIDEO_FORMAT}/`);
 }
+
+/*
+  ONE format for every browser, rather than the best one for each.
+
+  Cloudinary's f_auto would send a browser whichever modern format it handles
+  best, and for a photograph that is free. For video it is not: each format is a
+  whole re-encode of the film, made the first time somebody asks for it. On a
+  film of any length that takes over a minute — which nobody waits through — and
+  Cloudinary gave up altogether on the version for iPhones, answering with an
+  error, which is why the film would not play on a phone.
+
+  H.264 in an MP4 is a little larger than the newer formats and is played by
+  everything, everywhere. Asking for it by name means there is ONE copy to make
+  instead of one per browser: after the first visitor it is ready for everyone.
+*/
+const VIDEO_FORMAT = 'f_mp4,vc_h264,q_auto';
 
 /** A still from a Cloudinary video — its first frame — cut the same way. */
 function cloudinaryStill(url, transform) {
@@ -642,77 +658,60 @@ async function renderHome() {
   const desktopVideo = looksLikeVideo(desktopMedia) ? desktopMedia : '';
   const mobileVideo = looksLikeVideo(mobileMedia) ? mobileMedia : '';
 
+  const onPhone = window.matchMedia('(max-width: 768px)').matches;
+  /* The phone box if it's filled in, otherwise the computer one. */
+  const videoRef = (onPhone && settings.heroVideoMobileUrl && mobileVideo)
+    ? settings.heroVideoMobileUrl
+    : (desktopVideo ? settings.heroVideoDesktopUrl : (mobileVideo ? settings.heroVideoMobileUrl : ''));
+
   /*
-    PHONES. A phone screen is tall and a hero film is usually wide, so on a
-    phone the film is cut to the screen's shape by Cloudinary before it's sent —
-    720 pixels wide, a fraction of the full film's weight on mobile data — rather
-    than sending the whole wide film and letting the phone throw most of it away.
+    THE FILM IS NEVER CROPPED. It is shown whole, at its own shape, as a panel
+    rather than edge-to-edge — a split-screen edit showing two shots at once
+    would otherwise lose one of them to the sides of the screen.
 
-    It's cut two ways, listed in order, and the phone plays the first it can:
+    Only its SIZE changes: 1600 pixels across on a computer, 720 on a phone,
+    which is a fraction of the weight on mobile data.
 
-      1. a smart crop (g_auto) — Cloudinary follows whatever the shot is about,
-         so a face at the edge of a wide frame stays on screen. On a long film
-         Cloudinary prepares this in the background the first time it's asked
-         for, and answers "not ready yet" until it's done; and
-      2. a plain crop from the middle, which is always ready.
-
-    So a phone never gets a blank hero: it plays the middle crop until the smart
-    one exists, then the smart one from then on. Both come from the phone box if
-    it's filled in, otherwise from the computer one — a film already cut tall
-    passes through the crop unchanged.
+    The list is what to try, in order. Cloudinary makes a resized copy the first
+    time one is asked for, and a long film can take the best part of a minute —
+    so the last entry is the file exactly as uploaded, which needs no preparing
+    and is always there. mountHeroVideo works down the list if one won't play.
   */
-  const PHONE = '(max-width: 720px)';
-  const onPhone = window.matchMedia(PHONE).matches;
-  const phoneRef = isCloudinaryVideo(settings.heroVideoMobileUrl) ? settings.heroVideoMobileUrl
-    : !settings.heroVideoMobileUrl && isCloudinaryVideo(settings.heroVideoDesktopUrl) ? settings.heroVideoDesktopUrl
-    : '';
-  const PHONE_CUT = 'c_fill,ar_9:16,w_720';
-  const phoneSources = phoneRef
-    ? [cloudinaryVideo(phoneRef, `${PHONE_CUT},g_auto`), cloudinaryVideo(phoneRef, PHONE_CUT)]
-    : mobileVideo ? [mobileVideo] : [];
-  // On a computer, a cap at full HD: an upload in 4K would otherwise be sent
-  // in 4K to a screen that can't show it.
-  const computerSource = isCloudinaryVideo(settings.heroVideoDesktopUrl)
-    ? cloudinaryVideo(settings.heroVideoDesktopUrl, 'c_limit,w_1920')
-    : desktopVideo;
+  const videoSources = !videoRef ? []
+    : isCloudinaryVideo(videoRef)
+      ? [cloudinaryVideo(videoRef, onPhone ? 'c_limit,w_720' : 'c_limit,w_1600'), videoRef]
+      : [onPhone && mobileVideo ? mobileVideo : desktopVideo];
 
   /*
     The poster is the frame held while the film loads — and the whole background
-    when the film can't play: a slow connection, Data Saver, or an iPhone in Low
-    Power Mode, which won't start a film on its own. An explicit one wins;
-    failing that, a Cloudinary video hands over its own first frame, cut to the
-    same shape as the film this screen is about to get. A still dropped into a
-    video field becomes the poster too, which is how it ends up on screen.
+    when the film can't play at all: a very slow connection, Data Saver, or an
+    iPhone in Low Power Mode, which won't start a film on its own. An explicit
+    one wins; failing that a Cloudinary video hands over its own first frame, so
+    setting the film alone is enough. A still dropped into a film box becomes the
+    poster, which is how it ends up on screen.
   */
   const posterSource = settings.heroPosterUrl
     || (!desktopVideo && desktopMedia ? settings.heroVideoDesktopUrl : '')
-    || (onPhone && phoneRef ? cloudinaryStill(phoneRef, `${PHONE_CUT},g_auto`) : '')
-    || (isCloudinaryVideo(desktopVideo) ? cloudinaryPoster(settings.heroVideoDesktopUrl, 1920) : '');
-  const poster = assetUrl(posterSource, onPhone ? 720 : 1920);
+    || (isCloudinaryVideo(videoRef) ? cloudinaryPoster(videoRef, onPhone ? 720 : 1600) : '');
+  const poster = assetUrl(posterSource, onPhone ? 720 : 1600);
 
-  /*
-    Data Saver on: the visitor has asked sites to use less data, so the film is
-    left out and its still stands in for it.
-  */
+  /* Data Saver on: the visitor has asked sites to use less data. */
   const saveData = Boolean(navigator.connection?.saveData);
-  const hasVideo = !saveData && (computerSource || phoneSources.length);
+  const hasVideo = !saveData && videoSources.length;
 
   /*
     Hero media is optional by design. With no assets the CSS light shaft alone
     still reads as a finished hero — see .hero-light in styles.css.
 
-    crossorigin lets the cursor read the colour of the film under it, so it can
-    swap colour over a bright shot the same way it does over the gold. Cloudinary
-    allows that; an address from anywhere else might refuse, and a refused
-    request would stop the film loading at all — so only Cloudinary gets it.
+    One source, not several: which file to use is decided here, in JS, so the
+    browser is never asked to choose between them. Safari in particular is
+    unreliable at moving on from a <source> it can't play, and a hero that
+    silently stays black is the worst thing this page can do.
   */
-  const readable = isCloudinaryVideo(computerSource || phoneRef) ? 'crossorigin="anonymous"' : '';
   const heroMedia = hasVideo
     ? `<div class="hero-media">
-         <video autoplay muted loop playsinline preload="auto" ${readable} ${poster ? `poster="${poster}"` : ''}>
-           ${phoneSources.map((src) => `<source src="${esc(src)}" media="${PHONE}">`).join('')}
-           ${computerSource ? `<source src="${esc(computerSource)}">` : ''}
-         </video>
+         <video autoplay muted loop playsinline preload="auto" ${poster ? `poster="${poster}"` : ''}
+                data-sources="${esc(JSON.stringify(videoSources))}"></video>
        </div>`
     : poster
       ? `<div class="hero-media"><img src="${poster}" alt="" decoding="async"></div>`
@@ -853,7 +852,72 @@ function mountHome() {
   });
 
   mountCarousel($('[data-carousel]'));
+  mountHeroVideo();
   mountHeroParallax();
+}
+
+/**
+ * Starts the hero film, and keeps it from ever being a black rectangle.
+ *
+ * The addresses to try are on the element, best first. If one won't play — a
+ * resized copy Cloudinary hasn't finished making, a format this browser can't
+ * decode, a connection that drops — the next is tried, ending with the file
+ * exactly as it was uploaded.
+ *
+ * If none of them play, nothing is broken on screen: the poster is a frame of
+ * the film itself and simply stays put. That is what a phone in Low Power Mode
+ * shows, since iOS won't start a film on its own there however it is asked.
+ */
+function mountHeroVideo() {
+  const video = $('.hero-media video');
+  if (!video) return;
+
+  let sources;
+  try {
+    sources = JSON.parse(video.dataset.sources || '[]');
+  } catch {
+    sources = [];
+  }
+  if (!sources.length) return;
+
+  let index = 0;
+  /*
+    Moving on takes a timer as well as an error, because the thing most likely
+    to go wrong isn't an error at all: the first time a resized copy is asked
+    for, Cloudinary has to make it, and it simply doesn't answer until it has.
+    Waiting is not an option a visitor would choose, so after WAIT_MS the next
+    address — ending with the file exactly as uploaded, which is always ready —
+    is tried instead.
+  */
+  const WAIT_MS = 8000;
+  let timer = 0;
+  let settled = false;
+
+  const next = () => {
+    clearTimeout(timer);
+    if (settled) return;
+    index += 1;
+    if (index < sources.length) attempt();
+  };
+
+  const attempt = () => {
+    clearTimeout(timer);
+    timer = setTimeout(next, WAIT_MS);
+    video.src = sources[index];
+    video.load();
+    // Some browsers won't autoplay from the attribute alone but will when asked
+    // directly. A refusal is fine and expected — the poster is already there.
+    video.play?.().catch(() => {});
+  };
+
+  video.addEventListener('loadeddata', () => {
+    settled = true;
+    clearTimeout(timer);
+  });
+  video.addEventListener('error', next);
+
+  registerCleanup(() => clearTimeout(timer));
+  attempt();
 }
 
 /** Modal listing every video for one client, plus their tagline as the only text. */

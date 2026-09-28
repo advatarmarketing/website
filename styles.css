@@ -1029,21 +1029,54 @@ video.hero-hand { height: auto; object-fit: contain; }
 /*
   With a background set in edit mode (.hero--media), the order from the back is:
 
-    1. your video or image, full-bleed
+    1. your film, whole, as a panel on the right
     2. the gold — the line of light and its glow — as a faint wash
     3. the hand, fainter still
-    4. a soft shade behind the headline, so the words stay readable
+    4. the dark, coming in from the left and washing over the film's near edge,
+       so the headline sits on ink and the two meet with no seam
     5. the words
 
-  --overlay-k is the "Golden overlay" number from edit mode, as 0–1. It scales
-  the gold and the hand together, so one setting keeps them in proportion.
+  --overlay-k is the "Golden overlay" number from edit mode, as 0-1. It scales
+  the gold and the hand together, so one setting keeps them in proportion. The
+  dark at step 4 is deliberately NOT scaled by it: it is there so the headline
+  can be read, which is not a matter of taste.
 
   What changes from the gold-only hero is what the gold is ALLOWED to cover.
-  Without footage the gold layer ends in a solid colour and holds the left half
-  in solid black, because it IS the background. Over footage both of those would
-  hide the film completely, so here the gold keeps only its light.
+  With no film the gold layer ends in a solid colour and holds the left half in
+  solid black, because it IS the background. Over a film both of those would
+  hide it completely, so here the gold keeps only its light.
 */
 .hero--media { --overlay-k: 0.3; }
+
+/*
+  The film is shown WHOLE — never cropped to the shape of the screen. A
+  split-screen edit showing two shots at once would otherwise lose one of them
+  off the side. So it sits at its own shape as a panel down the right, and its
+  edges are faded out so it lies in the dark rather than on top of it.
+
+  `translate` rather than `transform` for the centring: the parallax in app.js
+  writes `transform` on this element as you scroll, and the two would fight.
+*/
+.hero--media .hero-media {
+  inset: 50% 0 auto auto;
+  translate: 0 -50%;
+  width: min(72%, 62rem);
+  height: auto;
+  -webkit-mask-image:
+    linear-gradient(90deg, transparent 0%, #000 20%, #000 90%, transparent 100%),
+    linear-gradient(180deg, transparent 0%, #000 12%, #000 88%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(90deg, transparent 0%, #000 20%, #000 90%, transparent 100%),
+    linear-gradient(180deg, transparent 0%, #000 12%, #000 88%, transparent 100%);
+  mask-composite: intersect;
+}
+.hero--media .hero-media img,
+.hero--media .hero-media video {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
 
 .hero--media .hero-light,
 :root[data-theme='light'] .hero--media .hero-light {
@@ -1067,20 +1100,24 @@ video.hero-hand { height: auto; object-fit: contain; }
 .hero--media .hero-grain { opacity: calc(var(--grain-opacity) * 0.4); }
 
 /*
-  The shade behind the headline: strongest at the left edge where the words
-  start, gone by the middle, so most of the film is untouched. Made from the
-  page colour, so it is dark in dark mode and cream in light mode, to match the
-  headline's own colour either way.
+  The dark behind the headline. Solid where the words start, thinning as it
+  crosses the film's faded near edge, gone by two-thirds across — the same
+  dark-left composition as the hero without a film, so the two look like the
+  same page. Made from the page colour, so it is near-black in dark mode and
+  cream in light, to match the headline either way.
 */
 .hero--media::after,
 :root[data-theme='light'] .hero--media::after {
   background:
     linear-gradient(90deg,
-      color-mix(in srgb, var(--bg) 72%, transparent) 0%,
-      color-mix(in srgb, var(--bg) 45%, transparent) 30%,
-      transparent 58%),
-    /* top: under the nav. bottom: under the two short lines at the foot of
-       the hero, which sit on the film and need their own shade to be read. */
+      var(--bg) 0%,
+      var(--bg) 24%,
+      color-mix(in srgb, var(--bg) 88%, transparent) 36%,
+      color-mix(in srgb, var(--bg) 52%, transparent) 48%,
+      color-mix(in srgb, var(--bg) 18%, transparent) 58%,
+      transparent 68%),
+    /* top: under the nav. bottom: under the two short lines at the foot of the
+       hero, which sit on the film and need their own shade to be read. */
     linear-gradient(to bottom,
       color-mix(in srgb, var(--bg) 45%, transparent) 0%, transparent 18%,
       transparent 66%,
@@ -1088,18 +1125,30 @@ video.hero-hand { height: auto; object-fit: contain; }
       color-mix(in srgb, var(--bg) 80%, transparent) 100%);
 }
 
-/* A smaller headline, so more of the film is on show around it. */
-.hero--media h1 { font-size: clamp(2.2rem, 5vw, 4.5rem); }
-
-/* On a phone the headline sits across the top, so the shade comes from there. */
+/*
+  On a phone the headline runs across the whole frame, so the composition turns
+  the other way up — as it does without a film: dark at the top for the words,
+  the picture below them.
+*/
 @media (max-width: 768px) {
+  .hero--media .hero-media {
+    inset: auto 0 14% 0;
+    translate: none;
+    width: 100%;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 16%, #000 84%, transparent 100%);
+    -webkit-mask-composite: source-over;
+    mask-image: linear-gradient(180deg, transparent 0%, #000 16%, #000 84%, transparent 100%);
+    mask-composite: add;
+  }
   .hero--media::after,
   :root[data-theme='light'] .hero--media::after {
     background: linear-gradient(to bottom,
-      color-mix(in srgb, var(--bg) 70%, transparent) 0%,
-      color-mix(in srgb, var(--bg) 40%, transparent) 45%,
-      transparent 65%,
-      color-mix(in srgb, var(--bg) 60%, transparent) 100%);
+      var(--bg) 0%,
+      var(--bg) 26%,
+      color-mix(in srgb, var(--bg) 80%, transparent) 38%,
+      color-mix(in srgb, var(--bg) 30%, transparent) 50%,
+      transparent 62%,
+      color-mix(in srgb, var(--bg) 55%, transparent) 100%);
   }
   .hero--media .hero-light,
   :root[data-theme='light'] .hero--media .hero-light {
