@@ -1053,7 +1053,15 @@ video.hero-hand { height: auto; object-fit: contain; }
   solid black, because it IS the background. Over a film both of those would
   hide it completely, so here the gold keeps only its light.
 */
-.hero--media { --overlay-k: 0.3; }
+.hero--media {
+  --overlay-k: 0.3;
+  /*
+    The width of the film panel and of the hand plate, named here because the
+    hand is positioned FROM the film: see .hero--media .hero-hand below.
+  */
+  --film-w: min(72%, 62rem);
+  --hand-w: min(88%, 70rem);
+}
 
 /*
   The film is shown WHOLE — never cropped to the shape of the screen. A
@@ -1067,7 +1075,7 @@ video.hero-hand { height: auto; object-fit: contain; }
 .hero--media .hero-media {
   inset: 50% 0 auto auto;
   translate: 0 -50%;
-  width: min(72%, 62rem);
+  width: var(--film-w);
   height: auto;
   -webkit-mask-image:
     linear-gradient(90deg, transparent 0%, #000 20%, #000 90%, transparent 100%),
@@ -1085,9 +1093,15 @@ video.hero-hand { height: auto; object-fit: contain; }
   object-fit: contain;
 }
 
+/*
+  The amber wash is held at half the overlay setting, the hand at a little over
+  half. They were level, and the wash — being a broad field of colour rather
+  than a drawing — took the colour out of the footage under it long before the
+  hand was anywhere near too strong. One setting still moves both together.
+*/
 .hero--media .hero-light,
 :root[data-theme='light'] .hero--media .hero-light {
-  opacity: var(--overlay-k);
+  opacity: calc(0.5 * var(--overlay-k));
   background:
     linear-gradient(90deg,
       transparent 55%,
@@ -1103,6 +1117,22 @@ video.hero-hand { height: auto; object-fit: contain; }
 }
 .hero--media .hero-hand,
 :root[data-theme='light'] .hero--media .hero-hand { opacity: calc(0.55 * var(--overlay-k)); }
+
+/*
+  The phone lines up with the seam down the middle of the film, so a
+  split-screen edit has the hand reaching into the join between its two halves
+  rather than across one of them.
+
+  The phone sits 35% of the way across the plate, so 65% of the plate is to its
+  right; the film is pinned to the right-hand edge, so its middle is half its
+  own width in from there. Putting the phone on that middle is the difference
+  between the two — which holds at any window width, rather than being a number
+  that only looked right on one screen.
+*/
+.hero--media .hero-hand {
+  width: var(--hand-w);
+  right: calc(var(--film-w) / 2 - 0.65 * var(--hand-w));
+}
 /* Grain is for flat colour; over real footage it would only soften the picture. */
 .hero--media .hero-grain { opacity: calc(var(--grain-opacity) * 0.4); }
 

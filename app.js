@@ -3377,7 +3377,7 @@ function mountEditHandlers() {
         {
           name: 'heroOverlay', label: 'Golden overlay (0–100)', type: 'text',
           hint: 'How strongly the hand, the line of light and the gold glow show over your background. '
-            + '0 is none at all, 100 is the full gold hero. Leave it blank for 30. Only used when a background is set.',
+            + '0 is none at all, 100 is as strong as they go. Leave it blank for 30. Only used when a background is set.',
         },
       ],
     }),

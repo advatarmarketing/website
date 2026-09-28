@@ -387,8 +387,10 @@ site falls back to the file exactly as uploaded, which never needs preparing.
   connection too slow for it. With a Cloudinary video, leave it empty: the video's own first
   frame is used.
 - **Golden overlay (0–100)** — how strongly the gold and the hand show over your background.
-  `0` hides them, `100` is the full gold hero, and empty means `30`. Raise it if the hero
-  feels plain, lower it to show more of the film.
+  `0` hides them, `100` is as strong as they go, and empty means `30`. Raise it if the hero
+  feels plain, lower it to show more of the film. The amber wash is held a little below the
+  hand: it is a broad field of colour rather than a drawing, so it drains the colour out of
+  the footage under it long before the hand is anywhere near too strong.
 
 The hand is always the site's own hand. There used to be a box to replace it, but it read as
 one of the background boxes, so it has gone; anything saved in it before is ignored.
