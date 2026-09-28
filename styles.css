@@ -1165,18 +1165,15 @@ video.hero-hand { height: auto; object-fit: contain; }
   */
   /*
     The hand reaches up into the film from below: sized and placed so the hand
-    itself lands just under the film's lower edge, rather than the plate running
-    off the corner of the screen with only the phone showing.
-
-    On a phone the hand is the only gold shape with any size to it — the shaft
-    of light is a thin line here — so it carries more of the overlay than it
-    does on a computer, where the glow does that work.
+    itself lands just under the film's lower edge and off to the right, rather
+    than the plate running off the corner of the screen with only the phone
+    showing. Its strength is left alone here, so the Golden overlay setting
+    moves it by exactly as much as it moves the hand on a computer.
   */
   .hero--media .hero-hand {
     width: 220%;
-    right: -45%;
+    right: -58%;
     top: 69%;
-    opacity: min(1, calc(1.5 * var(--overlay-k)));
   }
   .hero--media::after,
   :root[data-theme='light'] .hero--media::after {
