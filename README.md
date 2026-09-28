@@ -337,9 +337,11 @@ behind the page's content (where the pointer can't reach it) is read if it's mar
 ## Clients
 
 `data/seed.json` carries 48 clients across 9 categories, deduplicated from both tabs of the
-client spreadsheet so nobody appears twice. **Personal Brands & Creators** always leads the
-category order, and **Car & Transport** always comes last. Where a client also had event-photography coverage, that is
-recorded in their `notes` field rather than duplicating them under a second category.
+client spreadsheet so nobody appears twice. Out of the box **Personal Brands & Creators** leads the category order and **Car &
+Transport** comes last; **Industry order** in edit mode replaces that with whatever order
+you type (see *Arranging Our Work* below). Where a client also had event-photography
+coverage, that is recorded in their `notes` field — the **Tag** box in edit mode — rather
+than duplicating them under a second category.
 
 Two flags drive where a client appears:
 
@@ -347,9 +349,25 @@ Two flags drive where a client appears:
 - `isCaseStudy` — the Results "see more" view. Defaults to `isRecentWin`, so featuring a
   client as a case study later is a single checkbox in edit mode.
 
-The hero needs no assets: the amber light shaft is pure CSS and recomposes on mobile so
-the headline always sits on dark ground. Supplying `heroVideoDesktopUrl` /
-`heroVideoMobileUrl` / `heroPosterUrl` / `heroHandAssetUrl` layers real footage underneath it.
+## The background of the home page
+
+The first screen's background is set under **Edit hero assets**. Every box there takes a
+**Cloudinary** link — the address from Cloudinary's **Copy URL** button — or any other web
+address. Cloudinary files are re-encoded and sized for the web on their way to the page, so
+there is nothing to prepare before pasting one in.
+
+- **Background — computer** takes either a video *or* a still image. Paste whichever you
+  have; the site works out which it is, including for a Cloudinary link with no `.mp4` on
+  the end of it.
+- **Background — phone** is the same again, cropped for a tall screen. Leave it empty and
+  phones use the one above.
+- **Still image** is the frame held while a video loads, and the whole background on a
+  connection too slow for the video. With a Cloudinary video you can leave this empty — its
+  own first frame is used.
+
+Leave all of them empty and the hero the site draws itself is used: the amber light shaft is
+pure CSS, recomposes on a phone so the headline always sits on dark ground, and needs no
+files at all.
 
 ## Videos
 
@@ -421,15 +439,55 @@ scrolling down the page.
 
 ### Our Work reels
 
-- **Selected reels** — clients ticked *Featured*, as a drifting carousel (up to 12).
-- **By industry** — each industry lists its clients. Every client shows their **selected
-  reel** with their name under it, and the rest of their reels beside it as a small
-  drifting row, already showing. The selected reel is left out of that row, so it never
-  shows twice.
-- **Selected reel** (a field in each client's editor, under Manage clients) — a Google
-  Drive link: one of their videos, or a separate upload shared as "Anyone with the link".
-  Leave it blank and their first video is used. It also leads their Selected reels and
-  Recent Wins cards.
+**Selected reels** — the row at the top of the section. It is the clients ticked *Featured*,
+up to 12 of them, showing the reel chosen for each.
+
+**See more by industry** — each industry opens to show:
+
+1. a row of that industry's reels, and
+2. its clients as a list you can open.
+
+Open a client and you see their note, if one has been written for them, and their videos.
+Reels are vertical, so each one takes a single tile's width — a client with one reel gets one
+tile, not a reel stretched across the page.
+
+**View all client work** — the same client list, but every industry at once. Opening one of
+these two closes the other, so what you pressed always appears directly underneath it.
+
+### Arranging Our Work
+
+Four buttons appear under the two above when you are in edit mode.
+
+- **Manage clients** — add, change or delete a client, including their videos.
+- **Order, notes & tags** — every client on one screen, with three boxes each:
+  - **Order** — the number they are sorted by inside their industry. Smaller comes first, so
+    a client you want at the top gets `1`. Clients with the same number fall back to the
+    order they were added in.
+  - **Note** — the line shown when their row is opened. Leave it empty and nothing is shown
+    there at all — no placeholder text, no empty space.
+  - **Tag** — the small outlined label beside their name (for example, "Also event
+    photography coverage"). Empty means no label. This is the same field as **Notes** in
+    Manage clients; it is here as well so you can change several at once.
+- **Industry order** — one industry per line, in the order you want them to appear. Spell
+  each one exactly as it is spelled on the clients themselves, or it will be treated as a
+  different industry. An industry typed here shows up even before any clients are in it, so
+  you can put a new one in place first. Leave the box empty to use the built-in order
+  (Personal Brands & Creators first, Car & Transport last).
+- **Industry reels** — the row of videos at the top of an industry. One video per line:
+
+      Food & Beverage | https://res.cloudinary.com/…/video/upload/… | A caption
+
+  To move a video, move its line. To remove one, delete its line. Leave an industry out of
+  this box entirely and it shows one reel from each of its clients instead, which is what
+  happens until you set anything here.
+
+Inside **View all client work** there is one more: **Edit this line**, which sets the line
+above the list ("44 clients."). Type whatever you want there — "50+ clients.", or nothing at
+all if you would rather not give a number. Leave it empty and the real number is used.
+
+**Selected reel** (a field in each client's editor, under Manage clients) — a Google Drive
+or Cloudinary link: one of their videos, or a separate upload. Leave it blank and their
+first video is used. It leads their Selected reels and Recent Wins cards.
 
 ## Login
 

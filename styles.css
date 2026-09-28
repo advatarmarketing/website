@@ -22,6 +22,11 @@
   --text-lo:       #A79E90;
   --glass-fill:    rgba(255, 255, 255, 0.05);
   --glass-border:  rgba(255, 255, 255, 0.10);
+  /* A button's outline and its hover wash. An outline has to be visible in its
+     own right, so each theme sets its own — white on dark, ink on light. */
+  --btn-outline:       rgba(255, 255, 255, 0.22);
+  --btn-outline-hover: rgba(255, 255, 255, 0.40);
+  --btn-wash:          rgba(255, 255, 255, 0.09);
 
   /* Derived */
   --hairline:      rgba(255, 255, 255, 0.07);
@@ -97,6 +102,10 @@
   --text-lo:       #6E6558;
   --glass-fill:    rgba(20, 16, 10, 0.045);
   --glass-border:  rgba(20, 16, 10, 0.09);
+  /* On a warm near-white, a white outline is invisible — these are ink. */
+  --btn-outline:       rgba(27, 23, 18, 0.28);
+  --btn-outline-hover: rgba(27, 23, 18, 0.55);
+  --btn-wash:          rgba(27, 23, 18, 0.06);
 
   --hairline:      rgba(20, 16, 10, 0.10);
   --hairline-soft: rgba(20, 16, 10, 0.06);
@@ -503,8 +512,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
   with its dark label almost invisible on it.
 */
 .btn:hover {
-  --btn-bg: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255, 255, 255, 0.18);
+  --btn-bg: var(--btn-wash);
+  --btn-border: var(--btn-outline-hover);
 }
 .btn:active { transform: translateY(1px); }
 .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
@@ -518,10 +527,27 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .btn--gold:hover {
   --btn-bg: linear-gradient(135deg, #F7B855, var(--gold-1));
-  border-color: transparent;
+  --btn-border: transparent;
 }
 
-.btn--ghost { --btn-bg: transparent; --btn-border: rgba(255, 255, 255, 0.14); }
+.btn--ghost { --btn-bg: transparent; --btn-border: var(--btn-outline); }
+
+/*
+  Login: the one button in the bar that goes somewhere else, so it is drawn as
+  an outlined gold pill rather than another piece of grey glass — clear in both
+  themes without competing with a real gold call to action.
+*/
+.btn--login {
+  --btn-bg: transparent;
+  --btn-border: var(--gold-text);
+  --btn-fg: var(--gold-text);
+  font-weight: 600;
+}
+.btn--login:hover {
+  --btn-bg: linear-gradient(135deg, var(--gold-1), var(--gold-2));
+  --btn-border: transparent;
+  --btn-fg: #17120A;
+}
 
 .btn--sm { min-height: 40px; padding: 0.5rem 1.1rem; font-size: 0.75rem; }
 
@@ -1176,46 +1202,58 @@ video.hero-hand { height: auto; object-fit: contain; }
 .industry-names li { font-size: 0.8125rem; color: var(--text-lo); }
 
 /*
-  One client: their selected reel with their name under it, and the rest of
-  their reels beside it as a small drifting row — always showing.
+  Our Work, inside an industry: a row of that industry's reels along the top,
+  then its clients as a spaced-out list you can open.
 */
-.client-list { display: grid; grid-template-columns: minmax(0, 1fr); }
-.client-feature {
-  display: grid;
-  grid-template-columns: minmax(0, 17rem) minmax(0, 1fr);
-  gap: clamp(1rem, 3vw, 2rem);
-  align-items: start;
-  padding-block: 1.75rem;
-  border-top: 1px solid var(--hairline-soft);
-}
-.client-feature:first-child { border-top: 0; padding-top: 0.25rem; }
-.client-feature-lead { margin: 0; display: grid; gap: 0.75rem; align-content: start; min-width: 0; }
-.client-feature-lead figcaption { display: grid; gap: 0.3rem; align-content: end; }
-.client-feature-lead figcaption .tiny { margin: 0; }
-.client-feature-label {
-  display: inline-flex;
+.industry-reels { padding-block: 0.5rem 1.75rem; }
+
+.client-table { margin: 0; padding: 0; list-style: none; }
+.client-table > li + li { border-top: 1px solid var(--hairline-soft); }
+.client-table-empty { padding-block: 0.25rem 1.25rem; }
+
+.client-row-head {
+  display: flex;
   align-items: center;
-  gap: 0.45rem;
-  font-size: 0.75rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--gold-text);
+  gap: 0.85rem;
+  width: 100%;
+  min-height: 52px;
+  padding: 1rem 0;
+  background: none;
+  border: 0;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: color var(--mid) var(--ease), padding-left var(--mid) var(--ease);
 }
-.client-feature-label .icon { width: 14px; height: 14px; }
-.client-feature-name {
+.client-row-head:hover { color: var(--gold-text); padding-left: 0.4rem; }
+.client-row-head[aria-expanded='true'] { color: var(--gold-text); }
+.client-row-head[aria-expanded='true'] .icon { transform: rotate(90deg); }
+.client-row-head .icon { transition: transform var(--mid) var(--ease); flex: none; color: var(--text-lo); }
+
+.client-row-name {
   font-family: var(--font-display);
-  font-size: 1.0625rem;
-  letter-spacing: -0.01em;
-  color: var(--text-hi);
+  font-weight: 400;
+  font-size: clamp(1rem, 1.5vw, 1.1875rem);
+  letter-spacing: -0.015em;
 }
-.client-feature-reels { min-width: 0; }
-/* A client with one reel: their name sits beside it, not in an empty column. */
-.client-feature--solo .client-feature-lead {
-  grid-column: 1 / -1;
-  grid-template-columns: minmax(0, 17rem) minmax(0, 1fr);
-  column-gap: clamp(1rem, 3vw, 2rem);
-  align-items: end;
+.client-row-count { margin-left: auto; white-space: nowrap; color: var(--text-faint); }
+
+.client-row-body { padding-block: 0.25rem 1.5rem; display: grid; gap: 1rem; }
+.client-row-note { margin: 0; max-width: 60ch; color: var(--text-lo); font-size: 0.9375rem; }
+
+/*
+  Reels are vertical, so each one only takes a tile's worth of width. A client
+  with a single reel gets a single tile at the left, not a reel stretched across
+  the page with nothing beside it.
+*/
+.reel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 10rem));
+  justify-content: start;
+  gap: clamp(0.75rem, 2vw, 1.25rem);
 }
+.reel { margin: 0; display: grid; gap: 0.45rem; align-content: start; min-width: 0; }
+.reel figcaption { color: var(--text-faint); }
 
 .tag-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
 .tag {
@@ -1236,9 +1274,7 @@ video.hero-hand { height: auto; object-fit: contain; }
   padding-top: clamp(1.5rem, 4vw, 2.5rem);
   border-top: 1px solid var(--hairline);
 }
-.client-index-empty { padding: 0.9rem 0; list-style: none; }
-
-.client-index + .client-index { margin-top: 2rem; }
+.client-index + .client-index { margin-top: 2.25rem; }
 
 .client-index-head {
   display: flex;
@@ -1256,45 +1292,27 @@ video.hero-hand { height: auto; object-fit: contain; }
   color: var(--gold-text);
 }
 
-.client-index-list { margin: 0; padding: 0; list-style: none; }
-.client-index-list > li { border-bottom: 1px solid var(--hairline-soft); }
-
-.client-index-row {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  width: 100%;
-  min-height: 44px;
-  padding: 0.85rem 0;
-  background: none;
-  border: 0;
-  text-align: left;
-  color: inherit;
-  cursor: pointer;
-  transition: color var(--mid) var(--ease), padding-left var(--mid) var(--ease);
-}
-.client-index-row:hover { color: var(--gold-text); padding-left: 0.4rem; }
-.client-index-row[aria-expanded='true'] { color: var(--gold-text); }
-.client-index-row[aria-expanded='true'] .icon { transform: rotate(90deg); }
-.client-index-row .icon { transition: transform var(--mid) var(--ease); flex: none; color: var(--text-lo); }
-
-.client-index-name {
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: clamp(0.9375rem, 1.4vw, 1.0625rem);
-  letter-spacing: -0.015em;
-}
-.client-index-count { margin-left: auto; white-space: nowrap; }
-
 .tag--soft {
   border-style: dashed;
   color: var(--text-faint);
   font-size: 0.75rem;
 }
+/*
+  On a phone the row becomes two lines: the name with its chevron on the first,
+  the tag and the count under it — rather than the chevron dropping onto a line
+  of its own below everything else.
+*/
 @media (max-width: 640px) {
-  .client-index-row { flex-wrap: wrap; gap: 0.4rem 0.75rem; }
-  .client-index-count { margin-left: 0; width: 100%; }
-  .tag--soft { max-width: 100%; }
+  .client-row-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.3rem 0.75rem;
+  }
+  .client-row-name { grid-column: 1; grid-row: 1; }
+  .client-row-head > .icon { grid-column: 2; grid-row: 1; }
+  .client-row-head .tag--soft { grid-column: 1 / -1; justify-self: start; max-width: 100%; }
+  .client-row-count { grid-column: 1 / -1; margin-left: 0; }
 }
 
 /* ============================================ Case studies (R8) ========== */
@@ -1955,7 +1973,7 @@ video.hero-hand { height: auto; object-fit: contain; }
 .job-item h3,
 .process-heading, .process-title,
 .disclosure-title,
-.client-index-name,
+.client-row-name,
 .case-study-head h3,
 .empty-state h3,
 .modal-head h2 {
@@ -1975,6 +1993,15 @@ video.hero-hand { height: auto; object-fit: contain; }
   color: transparent;
   -webkit-text-fill-color: transparent;
   animation: sheen-drift 9s linear infinite;
+  /*
+    The gradient is clipped to the element's own box, and the tight line-height
+    above makes that box shorter than the letters themselves — so the tail of a
+    g or a y on the last line was being cut off. The padding gives the gradient
+    the room it needs; the matching negative margin takes it straight back out
+    of the layout, so nothing below moves.
+  */
+  padding-bottom: 0.16em;
+  margin-bottom: -0.16em;
 }
 
 /* Display type gets the bigger halo; smaller headings a cheaper text-shadow. */
@@ -1986,7 +2013,7 @@ video.hero-hand { height: auto; object-fit: contain; }
 .job-item h3,
 .process-heading, .process-title,
 .disclosure-title,
-.client-index-name,
+.client-row-name,
 .case-study-head h3,
 .modal-head h2 { text-shadow: 0 0 18px var(--sheen-glow-soft); }
 
@@ -2032,7 +2059,7 @@ video.hero-hand { height: auto; object-fit: contain; }
 .results-row .result .icon,
 .eyebrow .icon,
 .carousel-nav .icon,
-.client-index-row .icon,
+.client-row-head .icon,
 .disclosure-meta .icon,
 .btn .icon { animation: glow-pulse 5s ease-in-out infinite; }
 
@@ -2554,15 +2581,8 @@ body[data-copy-editing='true'] [data-copy]:hover { outline-style: solid; }
   .industry-layout,
   .photo-layout { grid-template-columns: minmax(0, 1fr); }
   .photo-layout > .media { max-width: 15rem; }
-  /* On a phone a client's reel sits small with their name beside it — never one
-     big reel filling the screen — and their other reels run full width below. */
-  .client-feature { grid-template-columns: minmax(0, 1fr); gap: 1.1rem; padding-block: 1.5rem; }
-  .client-feature-lead,
-  .client-feature--solo .client-feature-lead {
-    grid-template-columns: minmax(0, 42%) minmax(0, 1fr);
-    column-gap: 1rem;
-    align-items: end;
-  }
+  /* Two reels to a line on a phone, rather than one filling the screen. */
+  .reel-grid { grid-template-columns: repeat(auto-fit, minmax(6.5rem, 8.5rem)); }
 }
 
 @media (max-width: 560px) {
@@ -2790,10 +2810,10 @@ html[data-cursor='on'] :is(input, textarea, select, [contenteditable='true'], [c
   /* The sheen stops drifting but the gradient still paints, so headings keep
      their fill and never go transparent. */
   .display, .glow-text, .glow-word, .win-card h3, .card-body h3, .job-item h3,
-  .process-heading, .process-title, .disclosure-title, .client-index-name, .case-study-head h3,
+  .process-heading, .process-title, .disclosure-title, .client-row-name, .case-study-head h3,
   .empty-state h3, .modal-head h2 { animation: none; }
   .link-arrow .icon, .results-row .result .icon, .eyebrow .icon,
-  .carousel-nav .icon, .client-index-row .icon, .disclosure-meta .icon,
+  .carousel-nav .icon, .client-row-head .icon, .disclosure-meta .icon,
   .btn .icon { animation: none; filter: none; opacity: 1; }
   .site-grid .media, .media--wide { animation: none; }
 
@@ -2807,11 +2827,41 @@ html[data-cursor='on'] :is(input, textarea, select, [contenteditable='true'], [c
 */
 @supports not ((-webkit-background-clip: text) or (background-clip: text)) {
   .display, .glow-text, .glow-word, .win-card h3, .card-body h3, .job-item h3,
-  .process-heading, .process-title, .disclosure-title, .client-index-name, .case-study-head h3,
+  .process-heading, .process-title, .disclosure-title, .client-row-name, .case-study-head h3,
   .empty-state h3, .modal-head h2 {
     background-image: none;
     color: var(--text-hi);
     -webkit-text-fill-color: var(--text-hi);
   }
   .glow-word { color: var(--gold-text); -webkit-text-fill-color: var(--gold-text); }
+}
+
+/* ============================== Order, notes & tags (edit mode) ========== */
+
+.modal--wide { width: min(100%, 72rem); }
+
+.order-group + .order-group { margin-top: 1.75rem; }
+.order-group-head {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold-text);
+}
+/* Name first, then the three boxes; they drop under the name on a narrow screen. */
+.order-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) 6rem minmax(0, 2fr) minmax(0, 1.5fr);
+  gap: 0.6rem 0.85rem;
+  align-items: end;
+}
+.order-row-name { align-self: center; min-width: 0; overflow-wrap: anywhere; }
+.order-cell { display: grid; gap: 0.25rem; min-width: 0; }
+.order-cell .tiny { margin: 0; }
+@media (max-width: 720px) {
+  .order-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .order-row-name { grid-column: 1 / -1; }
+  .order-cell--num { grid-column: 1 / -1; }
 }

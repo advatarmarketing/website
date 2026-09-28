@@ -296,7 +296,7 @@ const NAV_ITEMS = [
 */
 const LOGIN_URL = 'https://app.advatar.co.uk';
 
-const loginLink = (className = 'btn btn--sm btn--ghost nav-login') => `
+const loginLink = (className = 'btn btn--sm btn--login nav-login') => `
   <a class="${className}" href="${LOGIN_URL}">
     ${icon('lock')}<span data-copy="nav.login">Login</span>
   </a>`;
@@ -493,6 +493,15 @@ const driveThumb = (fileId, width = 720) =>
 const isCloudinaryVideo = (ref) => /^https:\/\/res\.cloudinary\.com\/[^/]+\/video\//i.test(String(ref ?? ''));
 
 /*
+  Is this link a video? A file name usually says so, but a Cloudinary link
+  doesn't have to carry one — res.cloudinary.com/<cloud>/video/upload/<id> is a
+  perfectly good video address with no ".mp4" on the end — so the address itself
+  is checked as well. Used wherever a field takes either an image or a video.
+*/
+const looksLikeVideo = (url) =>
+  isCloudinaryVideo(url) || /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(String(url ?? ''));
+
+/*
   A still from a Cloudinary video, for the poster: its first frame (so_0), as a
   JPEG, no wider than asked. Cloudinary makes it from the video on request —
   there's nothing to upload separately. Ours goes first in the transformation
@@ -596,10 +605,35 @@ async function renderHome() {
   const [settings, clients] = await Promise.all([load('settings'), load('clients')]);
   const wins = clients.filter((client) => client.isRecentWin).sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
 
-  const desktopVideo = assetUrl(settings.heroVideoDesktopUrl);
-  const mobileVideo = assetUrl(settings.heroVideoMobileUrl);
-  const poster = assetUrl(settings.heroPosterUrl, 1920);
+  /*
+    The background behind the home page's first screen. Each of these takes a
+    Cloudinary link or any other web address; a Cloudinary one is re-encoded and
+    sized on delivery by assetUrl, so there is nothing to prepare before pasting
+    it in.
+
+    The two "video" fields will also take a still image. Someone setting this up
+    has one background in mind and one link in hand, and a hero that silently
+    stayed empty because the link was a photo rather than a film would be a
+    puzzle with no clue in it.
+  */
+  const desktopMedia = assetUrl(settings.heroVideoDesktopUrl, 2400);
+  const mobileMedia = assetUrl(settings.heroVideoMobileUrl, 1200);
   const hand = assetUrl(settings.heroHandAssetUrl, 1400);
+
+  const desktopVideo = looksLikeVideo(desktopMedia) ? desktopMedia : '';
+  const mobileVideo = looksLikeVideo(mobileMedia) ? mobileMedia : '';
+
+  /*
+    The poster is the frame held while the film loads, and the whole background
+    on a connection too slow for it. An explicit one wins; failing that, a
+    Cloudinary video can hand over its own first frame, so setting the video
+    alone is enough. A still dropped into a video field becomes the poster too,
+    which is how it ends up on screen.
+  */
+  const posterSource = settings.heroPosterUrl
+    || (!desktopVideo && desktopMedia ? settings.heroVideoDesktopUrl : '')
+    || (isCloudinaryVideo(desktopVideo) ? cloudinaryPoster(settings.heroVideoDesktopUrl, 1920) : '');
+  const poster = assetUrl(posterSource, 1920);
 
   /*
     Hero media is optional by design. With no assets the CSS light shaft alone
@@ -625,7 +659,7 @@ async function renderHome() {
 
     settings.heroHandAssetUrl still overrides it, and accepts an image or a video.
   */
-  const handIsVideo = /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(hand);
+  const handIsVideo = looksLikeVideo(hand);
   const heroHand = hand
     ? (handIsVideo
         ? `<video class="hero-hand" autoplay muted loop playsinline preload="metadata" aria-hidden="true" data-cursor-sample>
@@ -780,11 +814,20 @@ const CATEGORY_ORDER = [
   'Car & Transport',
 ];
 
-/** Clients grouped by industry, as [name, clients] pairs in display order. */
+/**
+ * Clients grouped by industry, as [name, clients] pairs in display order.
+ *
+ * The order of the industries comes from edit mode ("Industry order") when one
+ * has been set there; otherwise CATEGORY_ORDER above is used. Anything not
+ * named in either list falls to the end, alphabetically. Within an industry,
+ * clients follow their own Order number.
+ */
 function industriesOf(clients) {
+  const chosen = (state.settings?.industryOrder ?? []).filter(Boolean);
+  const sequence = chosen.length ? chosen : CATEGORY_ORDER;
   const rank = (name) => {
-    const index = CATEGORY_ORDER.indexOf(name);
-    return index === -1 ? CATEGORY_ORDER.length : index;
+    const index = sequence.findIndex((entry) => entry.toLowerCase() === name.toLowerCase());
+    return index === -1 ? sequence.length : index;
   };
   const grouped = clients.reduce((map, client) => {
     const key = client.category || 'Uncategorised';
@@ -793,7 +836,27 @@ function industriesOf(clients) {
   }, new Map());
   // Personal Brands & Creators always has its place, even before any are added.
   if (!grouped.has('Personal Brands & Creators')) grouped.set('Personal Brands & Creators', []);
-  return [...grouped].sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]));
+  // An industry named in edit mode shows up even while it is still empty, so it
+  // can be put in its place before the clients are added to it.
+  chosen.forEach((name) => { if (!grouped.has(name)) grouped.set(name, []); });
+  return [...grouped]
+    .map(([name, group]) => [name, [...group].sort((a, b) => (a.order ?? 999) - (b.order ?? 999))])
+    .sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]));
+}
+
+/**
+ * The videos for an industry's carousel. Chosen in edit mode ("Industry reels")
+ * if any have been; otherwise every client in that industry contributes their
+ * selected reel, so the row is useful before anything is set up.
+ */
+function industryReels(name, group) {
+  const picked = (state.settings?.industryReels ?? [])
+    .filter((row) => row.video && row.industry?.toLowerCase() === name.toLowerCase())
+    .map((row) => ({ video: row.video, caption: row.caption }));
+  if (picked.length) return picked;
+  return group
+    .map((client) => ({ video: clientReels(client).selected?.driveFileId, caption: client.name }))
+    .filter((row) => row.video);
 }
 
 /**
@@ -831,54 +894,83 @@ async function renderOurWork() {
     : '<span class="result muted">Add your results in edit mode</span>';
 
   /*
-    One block per client: their selected reel with their name under it, and the
-    rest of their reels beside it as a small drifting row, like the home
-    carousel — already showing, and never including the selected reel, so
-    nothing appears twice.
+    One client, as a line in a table you can open. Closed it is just their name,
+    their tag if they have one, and how much work is on it. Open it shows their
+    note (only if one has been written) and their reels — each reel takes one
+    tile's worth of width, not the whole line, so a client with a single
+    vertical reel doesn't leave a screen of empty space beside it.
+
+    `scope` keeps the ids unique: the same client appears in both the industry
+    view and the full index, and two panels can't share one id.
   */
-  const clientRow = (client) => {
-    const { selected, rest } = clientReels(client);
+  const clientTableRow = (scope) => (client) => {
+    const videos = (client.videos ?? []).filter((video) => video.driveFileId);
+    const id = `${scope}-${esc(client.id)}`;
     return `
-    <div class="client-feature${rest.length ? '' : ' client-feature--solo'}">
-      <figure class="client-feature-lead">
-        ${mediaTile({
-          driveFileId: selected?.driveFileId,
-          title: `${client.name} — ${selected?.title || 'selected reel'}`,
-          empty: 'Reels coming soon',
-        })}
-        <figcaption>
-          <span class="client-feature-label">${icon('film')}<span data-copy="work.client.selected">Selected reel</span></span>
-          <span class="client-feature-name">${esc(client.name)}</span>
-          ${client.tagline ? `<span class="tiny">${esc(client.tagline)}</span>` : ''}
-        </figcaption>
-      </figure>
-      ${rest.length ? `<div class="client-feature-reels">${videoCarousel({ ...client, videos: rest })}</div>` : ''}
-    </div>`;
+    <li class="client-row">
+      <button type="button" class="client-row-head" data-toggle="${id}"
+              aria-expanded="false" aria-controls="${id}">
+        <span class="client-row-name">${esc(client.name)}</span>
+        ${client.notes ? `<span class="tag tag--soft">${esc(client.notes)}</span>` : ''}
+        <span class="client-row-count tiny">${videos.length
+          ? `${videos.length} video${videos.length === 1 ? '' : 's'}`
+          : 'No work added yet'}</span>
+        ${icon('chevronRight')}
+      </button>
+      <div class="disclosure-panel" id="${id}" hidden data-animate="true">
+        <div class="client-row-body">
+          ${client.tagline ? `<p class="client-row-note">${esc(client.tagline)}</p>` : ''}
+          ${videos.length
+            ? `<div class="reel-grid">${videos.map((video) => `
+                <figure class="reel">
+                  ${mediaTile({ driveFileId: video.driveFileId, title: `${client.name} — ${video.title}` })}
+                  ${video.title ? `<figcaption class="tiny">${esc(video.title)}</figcaption>` : ''}
+                </figure>`).join('')}</div>`
+            : `<p class="tiny">No work added for ${esc(client.name)} yet — add their video links in edit mode.</p>`}
+        </div>
+      </div>
+    </li>`;
   };
 
-  const industryPanel = ([name, group], index) => `
+  /** The table of clients used by both the industry view and the full index. */
+  const clientTable = (group, scope, emptyLine) => group.length
+    ? `<ul class="client-table">${group.map(clientTableRow(scope)).join('')}</ul>`
+    : `<p class="tiny client-table-empty">${emptyLine}</p>`;
+
+  const industryPanel = ([name, group], index) => {
+    const reels = industryReels(name, group);
+    return `
     <div class="disclosure" data-reveal style="--i:${index}">
       <button type="button" class="disclosure-head" data-toggle="industry-${esc(name)}"
               aria-expanded="false" aria-controls="industry-${esc(name)}">
         <span class="disclosure-title">${esc(name)}</span>
         <span class="disclosure-meta">${icon('chevronRight')}</span>
       </button>
-      <div class="disclosure-panel" id="industry-${esc(name)}" hidden>
-        ${group.length
-          ? `<div class="client-list">${group.map(clientRow).join('')}</div>`
-          : `<p class="tiny" style="padding-block:0.25rem 1.25rem">No clients in ${esc(name)} yet — add them in edit mode.</p>`}
+      <div class="disclosure-panel" id="industry-${esc(name)}" hidden data-animate="true">
+        ${reels.length
+          ? `<div class="industry-reels">
+               <div class="carousel carousel--videos carousel--reels" data-carousel>
+                 <div class="carousel-track" data-autoscroll="true">
+                   ${reels.map((reel, i) => `
+                     <figure class="video-card" style="--i:${i}">
+                       ${mediaTile({ driveFileId: reel.video, title: reel.caption || name })}
+                       ${reel.caption ? `<figcaption class="tiny">${esc(reel.caption)}</figcaption>` : ''}
+                     </figure>`).join('')}
+                 </div>
+               </div>
+             </div>`
+          : ''}
+        ${clientTable(group, 'ind', `No clients in ${esc(name)} yet — add them in edit mode.`)}
       </div>
     </div>`;
+  };
 
   const photoCategory = (category, index) => `
     <div class="disclosure" data-reveal style="--i:${index}">
       <button type="button" class="disclosure-head" data-toggle="photo-${esc(category.id)}"
               aria-expanded="false" aria-controls="photo-${esc(category.id)}">
         <span class="disclosure-title">${esc(category.name)}</span>
-        <span class="disclosure-meta">
-          <span class="tiny">${category.photos?.length ?? 0} photo${category.photos?.length === 1 ? '' : 's'}</span>
-          ${icon('chevronRight')}
-        </span>
+        <span class="disclosure-meta">${icon('chevronRight')}</span>
       </button>
       <div class="disclosure-panel" id="photo-${esc(category.id)}" hidden data-animate="true">
         <div class="photo-layout">
@@ -910,7 +1002,7 @@ async function renderOurWork() {
       <div class="shell">
         <div class="glow" style="--glow-w:34rem;--glow-h:26rem;--glow-a:0.28;left:-10rem;top:-6rem"></div>
         <h2 class="display display--lg" data-reveal data-copy="work.results.title"
-            style="margin-bottom:clamp(1.75rem,4vw,2.75rem)">Our Drive? Results.</h2>
+            style="margin-bottom:calc(clamp(1.75rem,4vw,2.75rem) - 0.16em)">Our Drive? Results.</h2>
         <div class="results-row" data-reveal>${resultsRow}</div>
         <div style="margin-top:1.5rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center">
           <button type="button" class="link-arrow" data-results-modal><span data-copy="work.results.more">See more</span>${icon('arrowRight')}</button>
@@ -944,15 +1036,20 @@ async function renderOurWork() {
 
         <!-- Both ways into the client work, side by side. -->
         <div class="work-actions" data-reveal>
-          <button type="button" class="btn btn--ghost" data-toggle="industries"
+          <button type="button" class="btn btn--ghost" data-toggle="industries" data-exclusive="work"
                   aria-expanded="false" aria-controls="industries">
             ${icon('film')}<span data-copy="work.video.by-industry">See more by industry</span>
           </button>
-          <button type="button" class="btn btn--ghost" data-toggle="all-clients"
+          <button type="button" class="btn btn--ghost" data-toggle="all-clients" data-exclusive="work"
                   aria-expanded="false" aria-controls="all-clients">
             ${icon('layers')}<span data-copy="work.video.all-clients">View all client work</span>
           </button>
-          ${editOnly(`<button type="button" class="edit-chip" data-edit="clients">${icon('pencil')} Manage clients</button>            <button type="button" class="edit-chip" data-edit="sync-clients">${icon('layers')} Sync clients</button>`)}
+          ${editOnly(`
+            <button type="button" class="edit-chip" data-edit="clients">${icon('pencil')} Manage clients</button>
+            <button type="button" class="edit-chip" data-edit="client-order">${icon('layers')} Order, notes &amp; tags</button>
+            <button type="button" class="edit-chip" data-edit="industry-order">${icon('film')} Industry order</button>
+            <button type="button" class="edit-chip" data-edit="industry-reels">${icon('film')} Industry reels</button>
+            <button type="button" class="edit-chip" data-edit="sync-clients">${icon('layers')} Sync clients</button>`)}
         </div>
 
         <div class="disclosure-panel" id="industries" hidden style="margin-top:2rem">
@@ -970,37 +1067,15 @@ async function renderOurWork() {
                 ${eyebrow('All client work', 'layers')}
                 <h3 class="display display--md" data-copy="work.all.title">Everyone we've worked with.</h3>
               </div>
-              <p class="lede">${clients.length} client${clients.length === 1 ? '' : 's'}.
+              <p class="lede">${esc(state.settings?.workClientsLabel || `${clients.length} client${clients.length === 1 ? '' : 's'}.`)}
                 <span class="dim" data-copy="work.all.lede-dim">Listed once each, under their primary category.</span></p>
+              ${editOnly(`<button type="button" class="edit-chip" data-edit="client-count">${icon('pencil')} Edit this line</button>`)}
             </div>
 
             ${industries.map(([name, group]) => `
               <div class="client-index" data-reveal>
-                <h4 class="client-index-head">
-                  <span>${esc(name)}</span>
-                </h4>
-                <ul class="client-index-list">
-                  ${group.map((client) => `
-                    <li>
-                      <button type="button" class="client-index-row" data-toggle="idx-${esc(client.id)}"
-                              aria-expanded="false" aria-controls="idx-${esc(client.id)}">
-                        <span class="client-index-name">${esc(client.name)}</span>
-                        ${client.notes ? `<span class="tag tag--soft">${esc(client.notes)}</span>` : ''}
-                        <span class="client-index-count tiny">
-                          ${client.videos?.length ? `${client.videos.length} video${client.videos.length === 1 ? '' : 's'}` : 'No work added yet'}
-                        </span>
-                        ${icon('chevronRight')}
-                      </button>
-                      <div class="disclosure-panel" id="idx-${esc(client.id)}" hidden data-animate="true">
-                        ${client.videos?.length
-                          ? `<div style="padding-block:1rem 1.25rem">${videoCarousel(client)}</div>`
-                          : `<p class="tiny" style="padding-block:0.85rem 1.25rem">
-                               No work added for ${esc(client.name)} yet — add their Drive links in edit mode.
-                             </p>`}
-                      </div>
-                    </li>`).join('')}
-                  ${group.length ? '' : `<li class="client-index-empty tiny">No clients in ${esc(name)} yet — add them in edit mode.</li>`}
-                </ul>
+                <h4 class="client-index-head"><span>${esc(name)}</span></h4>
+                ${clientTable(group, 'idx', `No clients in ${esc(name)} yet — add them in edit mode.`)}
               </div>`).join('')}
         </div>
       </div>
@@ -1036,7 +1111,7 @@ async function renderOurWork() {
     <section class="section" id="photography">
       <div class="shell">
         ${eyebrow('Photography', 'image')}
-        <h2 class="display display--lg" data-reveal data-copy="work.photo.title" style="margin-bottom:2.5rem">Shot properly, lit properly.</h2>
+        <h2 class="display display--lg" data-reveal data-copy="work.photo.title" style="margin-bottom:calc(2.5rem - 0.16em)">Shot properly, lit properly.</h2>
         ${photography.length
           ? photography.map(photoCategory).join('')
           : emptyState('No categories yet', 'Add photography categories in edit mode.')}
@@ -1051,7 +1126,7 @@ async function renderOurWork() {
     <section class="section backdrop-warm" id="branding">
       <div class="shell">
         ${eyebrow('Branding', 'diamond')}
-        <h2 class="display display--lg" data-reveal data-copy="work.branding.title" style="margin-bottom:2.5rem">Elevating your brand.</h2>
+        <h2 class="display display--lg" data-reveal data-copy="work.branding.title" style="margin-bottom:calc(2.5rem - 0.16em)">Elevating your brand.</h2>
         ${branding.length
           ? `<div class="branding-masonry">${branding.map((item, index) => `
               <figure data-reveal style="--i:${index}">
@@ -1507,7 +1582,7 @@ async function renderHiring() {
     <section class="section" id="vacancies">
       <div class="shell">
         ${eyebrow('Open roles', 'briefcase')}
-        <h2 class="display display--lg" data-reveal data-copy="hiring.vacancies" style="margin-bottom:2rem">Vacancies.</h2>
+        <h2 class="display display--lg" data-reveal data-copy="hiring.vacancies" style="margin-bottom:calc(2rem - 0.16em)">Vacancies.</h2>
 
         <div class="job-filters" data-reveal>
           <div class="field">
@@ -2012,38 +2087,64 @@ function mountChrome() {
     explicit in the original brief. Panels marked data-animate get the softer
     grid-rows unravel instead (R10).
   */
+  /*
+    Opening a panel: [data-exclusive] buttons share a slot, so only one of them
+    is ever open. "See more by industry" and "View all client work" are a pair —
+    with both open, the second one's content landed below the whole of the
+    first, far enough down the page that pressing it looked like nothing had
+    happened.
+  */
+  const setPanel = (button, open) => {
+    const panel = document.getElementById(button.getAttribute('aria-controls'));
+    if (!panel) return null;
+    button.setAttribute('aria-expanded', String(open));
+
+    if (panel.dataset.animate === 'true') {
+      if (!open) {
+        panel.dataset.open = 'false';
+        // Once collapsed, hide it properly — otherwise its padding and border
+        // stay on screen as a stray gap under the button.
+        setTimeout(() => { if (panel.dataset.open === 'false') panel.hidden = true; }, 340);
+      } else {
+        panel.hidden = false;
+        panel.classList.add('disclosure-panel--animated');
+        panel.getBoundingClientRect();     // commit the collapsed state first,
+        panel.dataset.open = 'true';       // so the unravel actually animates
+      }
+    } else {
+      panel.hidden = !open;
+    }
+
+    if (open) {
+      /*
+        A [data-reveal] inside a hidden panel can never intersect, so its reveal
+        would never fire and it would open as blank space. Anything revealed by
+        opening a panel is, by definition, already "in view" — mark it shown.
+      */
+      $$('[data-reveal]', panel).forEach((node) => { node.dataset.shown = 'true'; });
+      // Carousels inside a closed panel had no width to measure; mount them now.
+      requestAnimationFrame(() => $$('[data-carousel]', panel).forEach((node) => mountCarousel(node)));
+    }
+    return panel;
+  };
+
   $$('[data-toggle]').forEach((button) => {
     button.addEventListener('click', () => {
-      const panel = document.getElementById(button.getAttribute('aria-controls'));
-      if (!panel) return;
       const open = button.getAttribute('aria-expanded') === 'true';
-      button.setAttribute('aria-expanded', String(!open));
 
-      if (panel.dataset.animate === 'true') {
-        if (open) {
-          panel.dataset.open = 'false';
-          // Once collapsed, hide it properly — otherwise its padding and border
-          // stay on screen as a stray gap under the button.
-          setTimeout(() => { if (panel.dataset.open === 'false') panel.hidden = true; }, 340);
-        } else {
-          panel.hidden = false;
-          panel.classList.add('disclosure-panel--animated');
-          panel.getBoundingClientRect();     // commit the collapsed state first,
-          panel.dataset.open = 'true';       // so the unravel actually animates
-        }
-      } else {
-        panel.hidden = open;
+      if (!open && button.dataset.exclusive) {
+        $$(`[data-exclusive="${button.dataset.exclusive}"]`)
+          .filter((other) => other !== button && other.getAttribute('aria-expanded') === 'true')
+          .forEach((other) => setPanel(other, false));
       }
 
-      if (!open) {
-        /*
-          A [data-reveal] inside a hidden panel can never intersect, so its reveal
-          would never fire and it would open as blank space. Anything revealed by
-          opening a panel is, by definition, already "in view" — mark it shown.
-        */
-        $$('[data-reveal]', panel).forEach((node) => { node.dataset.shown = 'true'; });
-        // Carousels inside a closed panel had no width to measure; mount them now.
-        requestAnimationFrame(() => $$('[data-carousel]', panel).forEach((node) => mountCarousel(node)));
+      const panel = setPanel(button, !open);
+      if (!panel) return;
+
+      // Having swapped one panel for another, put the button back where the eye
+      // already is, so the page doesn't appear to jump somewhere else.
+      if (!open && button.dataset.exclusive) {
+        requestAnimationFrame(() => scrollToTarget(button, { offset: -120 }));
       }
     });
   });
@@ -2051,6 +2152,7 @@ function mountChrome() {
   mountReveals();
   mountAmbientStill();
 }
+
 
 /* -------------------------------------------------------- Scroll reveal --- */
 
@@ -3050,6 +3152,9 @@ function openSettingsEditor({ title, subtitle, fields }) {
 */
 const IMAGE_HINT = 'Paste a Cloudinary URL (or any image link). Cloudinary images are resized and compressed for the web automatically.';
 
+/* The hero background takes either, so it says so rather than naming one. */
+const BACKGROUND_HINT = 'Cloudinary videos and images are both re-encoded and sized for the web on the way to the page, so there is nothing to prepare first.';
+
 const CLIENT_FIELDS = [
   { name: 'name', label: 'Client name', type: 'text' },
   { name: 'category', label: 'Industry', type: 'text', hint: 'Groups the client on Our Work — e.g. "Personal Brands & Creators".' },
@@ -3115,12 +3220,22 @@ function mountEditHandlers() {
   const handlers = {
     hero: () => openSettingsEditor({
       title: 'Hero assets',
-      subtitle: 'Leave any of these blank and the CSS-only golden hero is used instead. Cloudinary URLs are compressed on delivery.',
+      subtitle: 'The background of the home page\'s first screen. Leave all of these blank '
+        + 'and the golden hero the site draws itself is used instead.',
       fields: [
-        { name: 'heroVideoDesktopUrl', label: 'Hero video — desktop', type: 'text' },
-        { name: 'heroVideoMobileUrl', label: 'Hero video — mobile', type: 'text' },
-        { name: 'heroPosterUrl', label: 'Poster image (slow-connection fallback)', type: 'text', hint: IMAGE_HINT },
-        { name: 'heroHandAssetUrl', label: 'Hand asset (PNG/WebP with transparency)', type: 'text', hint: IMAGE_HINT },
+        {
+          name: 'heroVideoDesktopUrl', label: 'Background — computer', type: 'text',
+          hint: `A video or a still image: paste the link from Cloudinary's Copy URL, or any other web address. ${BACKGROUND_HINT}`,
+        },
+        {
+          name: 'heroVideoMobileUrl', label: 'Background — phone', type: 'text',
+          hint: 'The same again, cropped for a tall screen. Leave it blank to use the one above on phones too.',
+        },
+        {
+          name: 'heroPosterUrl', label: 'Still image (shown while a video loads)', type: 'text',
+          hint: `Leave this blank when the background is a Cloudinary video — its own first frame is used. ${IMAGE_HINT}`,
+        },
+        { name: 'heroHandAssetUrl', label: 'Hand asset (image or video)', type: 'text', hint: IMAGE_HINT },
       ],
     }),
 
@@ -3204,6 +3319,42 @@ function mountEditHandlers() {
       fields: JOB_FIELDS, label: (item) => item.title || item.id,
     }),
 
+    'industry-order': () => openSettingsEditor({
+      title: 'Industry order',
+      subtitle: 'One industry per line, in the order they should appear on Our Work. '
+        + 'Spell them exactly as they are spelled on the clients themselves. '
+        + 'Leave this empty to use the built-in order.',
+      fields: [{
+        name: 'industryOrder', label: 'Industries', type: 'lines',
+        hint: 'One per line. An industry listed here shows up even before any clients are in it.',
+      }],
+    }),
+
+    'industry-reels': () => openSettingsEditor({
+      title: 'Industry reels',
+      subtitle: 'The row of videos at the top of an industry, in the order you list them. '
+        + 'Leave an industry out and it shows one reel from each of its clients instead.',
+      fields: [{
+        name: 'industryReels', label: 'Reels', type: 'rows',
+        hint: 'To move a video, move its line. To remove one, delete its line.',
+        columns: [
+          { key: 'industry', label: 'Industry' },
+          { key: 'video', label: 'Video link (Google Drive or Cloudinary)' },
+          { key: 'caption', label: 'Caption (optional)' },
+        ],
+      }],
+    }),
+
+    'client-count': () => openSettingsEditor({
+      title: 'The line above the client list',
+      fields: [{
+        name: 'workClientsLabel', label: 'Line', type: 'text',
+        hint: 'e.g. "50+ clients." Leave it empty to show the real number of clients on the site.',
+      }],
+    }),
+
+    'client-order': openClientOrderEditor,
+
     'recent-wins': openRecentWinsEditor,
     submissions: openSubmissionsList,
     'sync-clients': openClientSync,
@@ -3224,6 +3375,96 @@ function mountEditHandlers() {
 
   $$('[data-edit]').forEach((button) => {
     button.addEventListener('click', () => handlers[button.dataset.edit]?.());
+  });
+}
+
+/**
+ * Order, notes and tags for every client, in one place — so the whole of Our
+ * Work can be arranged without opening each client in turn.
+ *
+ *  - Order   the number a client is sorted by inside its industry, smallest
+ *            first. Change the numbers to change the order.
+ *  - Note    the line shown when that client's row is opened. Leave it empty
+ *            and nothing is shown there at all — no placeholder.
+ *  - Tag     the small outlined label beside the client's name. Empty means
+ *            no label.
+ */
+function openClientOrderEditor() {
+  const clients = state.clients ?? [];
+  const groups = industriesOf(clients);
+
+  openModal({
+    title: 'Order, notes & tags',
+    subtitle: 'Smaller numbers come first. A note or a tag left empty simply isn\'t shown.',
+    className: 'modal--wide',
+    body: `
+      <form class="editor-form" id="order-form">
+        ${groups.map(([name, group]) => group.length ? `
+          <div class="order-group">
+            <h4 class="order-group-head">${esc(name)}</h4>
+            <ul class="admin-list">
+              ${group.map((client) => `
+                <li class="order-row" data-id="${esc(client.id)}">
+                  <strong class="order-row-name">${esc(client.name)}</strong>
+                  <label class="order-cell order-cell--num">
+                    <span class="tiny">Order</span>
+                    <input type="number" data-field="order" value="${esc(client.order ?? 999)}">
+                  </label>
+                  <label class="order-cell">
+                    <span class="tiny">Note</span>
+                    <input type="text" data-field="tagline" value="${esc(client.tagline ?? '')}"
+                           placeholder="Shown when the row is opened">
+                  </label>
+                  <label class="order-cell">
+                    <span class="tiny">Tag</span>
+                    <input type="text" data-field="notes" value="${esc(client.notes ?? '')}"
+                           placeholder="Small label beside the name">
+                  </label>
+                </li>`).join('')}
+            </ul>
+          </div>` : '').join('')}
+        <p class="form-status" role="status" aria-live="polite"></p>
+        <div class="editor-actions">
+          <button type="button" class="btn" data-close>Cancel</button>
+          <button type="submit" class="btn btn--gold">Save</button>
+        </div>
+      </form>`,
+    onMount(host) {
+      const form = $('#order-form', host);
+      const status = $('.form-status', form);
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        status.dataset.state = '';
+        status.textContent = 'Saving…';
+
+        // The whole list goes back at once, each client carrying everything it
+        // already had plus whatever was changed here.
+        const edits = new Map($$('.order-row', form).map((row) => {
+          const value = (field) => $(`[data-field="${field}"]`, row).value.trim();
+          const order = Number(value('order'));
+          return [row.dataset.id, {
+            order: Number.isFinite(order) ? order : 999,
+            tagline: value('tagline'),
+            notes: value('notes'),
+          }];
+        }));
+        const items = clients.map((client) => ({ ...client, ...(edits.get(client.id) ?? {}) }));
+
+        try {
+          await api.put('/api/clients', { items });
+          invalidate('clients');
+          await load('clients');
+          closeModal();
+          toast('Saved.');
+          await renderRoute(window.location.pathname, { restoreScroll: true });
+        } catch (error) {
+          status.dataset.state = 'error';
+          status.textContent = error.message;
+          toast(error.message, 'error');
+        }
+      });
+    },
   });
 }
 
@@ -3398,14 +3639,18 @@ const resumeScrolling = () => lenis?.start();
  * a plain window.scrollTo mid-glide would be pulled straight back to where
  * Lenis was heading.
  */
-function scrollToTarget(target, { immediate = false } = {}) {
+function scrollToTarget(target, { immediate = false, offset = 0 } = {}) {
   if (lenis) {
-    lenis.scrollTo(target, { immediate });
+    lenis.scrollTo(target, { immediate, offset });
     return;
   }
   const behavior = immediate || prefersReducedMotion() ? 'auto' : 'smooth';
-  if (typeof target === 'number') window.scrollTo({ top: target, behavior });
-  else target?.scrollIntoView({ behavior });
+  if (typeof target === 'number') { window.scrollTo({ top: target + offset, behavior }); return; }
+  if (!target) return;
+  // Without Lenis there is no offset option, so work the position out directly —
+  // the nav sits over the top of the page and would otherwise cover the target.
+  if (offset) window.scrollTo({ top: window.scrollY + target.getBoundingClientRect().top + offset, behavior });
+  else target.scrollIntoView({ behavior });
 }
 
 /* ----------------------------------------------------------- Cursor ------ */
@@ -4039,8 +4284,13 @@ async function boot() {
   }
 
   await renderRoute(window.location.pathname);
-  mountCursor();
+  /*
+    The cursor is mounted after the intro film, not before: while the film is
+    playing there is nothing on screen to point at, and a circle drifting over
+    it was a distraction. Until then the ordinary arrow is left alone.
+  */
   await playLoader();
+  mountCursor();
   mountLenis();
   watchMotionPreference();
   playThemeNotice();

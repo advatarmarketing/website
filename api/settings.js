@@ -66,6 +66,22 @@ function sanitize(settings) {
         caption: clean(entry?.caption, 120),
       }))
       .filter((entry) => entry.imageUrl || entry.driveFileId),
+    /* Our Work. The industries in the order they should appear, the videos
+       chosen for each industry's carousel, and the line above the full client
+       index (blank uses the real number of clients). */
+    industryOrder: (Array.isArray(input.industryOrder) ? input.industryOrder : [])
+      .slice(0, 40)
+      .map((name) => clean(name, 80))
+      .filter(Boolean),
+    industryReels: (Array.isArray(input.industryReels) ? input.industryReels : [])
+      .slice(0, 200)
+      .map((row) => ({
+        industry: clean(row?.industry, 80),
+        video: cleanVideoRef(row?.video),
+        caption: clean(row?.caption, 120),
+      }))
+      .filter((row) => row.industry && row.video),
+    workClientsLabel: clean(input.workClientsLabel, 80),
     /* Look Inside: an image beside each step, keyed by step number. */
     lookInsideImages: (Array.isArray(input.lookInsideImages) ? input.lookInsideImages : [])
       .slice(0, 40)
