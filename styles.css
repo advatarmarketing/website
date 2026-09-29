@@ -551,6 +551,40 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .btn--sm { min-height: 40px; padding: 0.5rem 1.1rem; font-size: 0.75rem; }
 
+/*
+  A quieter call to action than the gold one: a pill whose surface is a slow
+  sheen travelling across it, lit a little brighter than the page rather than
+  painted a different colour. It should read as something to press without
+  shouting over the work around it.
+
+  The tones are mixed from the page's own colours, so it stays right in both
+  themes, and it is a touch brighter and its edge gold on hover. `background`
+  in .btn is a shorthand, which resets background-size — this rule comes after
+  it, so the size sticks.
+*/
+.btn--sheen {
+  --btn-fg: var(--text-hi);
+  --btn-border: var(--btn-outline);
+  --sheen-1: color-mix(in srgb, var(--text-hi) 7%, transparent);
+  --sheen-2: color-mix(in srgb, var(--text-hi) 16%, transparent);
+  --btn-bg: linear-gradient(100deg,
+    var(--sheen-1) 0%,
+    var(--sheen-1) 30%,
+    var(--sheen-2) 46%,
+    var(--sheen-2) 54%,
+    var(--sheen-1) 70%,
+    var(--sheen-1) 100%);
+  background-size: 300% 100%;
+  animation: sheen-drift 14s linear infinite;
+  letter-spacing: 0.14em;
+}
+.btn--sheen:hover {
+  --btn-border: var(--gold-text);
+  --sheen-1: color-mix(in srgb, var(--text-hi) 11%, transparent);
+  --sheen-2: color-mix(in srgb, var(--text-hi) 22%, transparent);
+}
+.btn--sheen .icon { color: var(--gold-text); animation: none; }
+
 /* Text link with a trailing arrow that nudges on hover.
    Also used on <button>, so the native button chrome has to be reset here. */
 .link-arrow {
@@ -1153,13 +1187,18 @@ video.hero-hand { height: auto; object-fit: contain; }
       color-mix(in srgb, var(--bg) 52%, transparent) 48%,
       color-mix(in srgb, var(--bg) 18%, transparent) 58%,
       transparent 68%),
-    /* top: under the nav. bottom: under the two short lines at the foot of the
-       hero, which sit on the film and need their own shade to be read. */
+    /*
+      Top: under the nav. Bottom: under the two short lines at the foot of the
+      hero, which sit on the film and need their own shade to be read — and it
+      finishes on the page colour exactly, with nothing of the film left in it.
+      Anything less and the hero ended a shade lighter than whatever follows it,
+      which drew a line straight across the page at the join.
+    */
     linear-gradient(to bottom,
       color-mix(in srgb, var(--bg) 45%, transparent) 0%, transparent 18%,
       transparent 66%,
       color-mix(in srgb, var(--bg) 62%, transparent) 84%,
-      color-mix(in srgb, var(--bg) 80%, transparent) 100%);
+      var(--bg) 100%);
 }
 
 /*
@@ -1213,7 +1252,8 @@ video.hero-hand { height: auto; object-fit: contain; }
       color-mix(in srgb, var(--bg) 80%, transparent) 38%,
       color-mix(in srgb, var(--bg) 30%, transparent) 50%,
       transparent 62%,
-      color-mix(in srgb, var(--bg) 55%, transparent) 100%);
+      color-mix(in srgb, var(--bg) 45%, transparent) 88%,
+      var(--bg) 100%);
   }
   .hero--media .hero-light,
   :root[data-theme='light'] .hero--media .hero-light {
@@ -2752,6 +2792,101 @@ a.glass-card:active, .glass-card--interactive:active { transform: translateY(-1p
 /* The edge fade only makes sense when the row actually runs on. */
 .carousel--videos:not([data-looping='true'])::after { display: none; }
 .video-card { margin: 0; display: grid; gap: 0.5rem; align-content: start; }
+
+/* -------------------------- Clients, between the hero and the work ------ */
+
+/*
+  A section whose whole job is to carry the first screen into the page under
+  it. The first screen paints its own flat colour over everything, grain
+  included; below it the page's grain comes back, and where that started was a
+  line straight across the page.
+
+  So this section starts on exactly that flat colour, warms through the middle,
+  and fades to nothing at the foot — the grain returns over the depth of a
+  whole section rather than at an edge. The logos travel through the middle of
+  it, where the warmth is.
+*/
+.section--clients {
+  position: relative;
+  isolation: isolate;
+  /* Long enough that the fade is gradual and the row sits inside it. */
+  padding-block: clamp(4.5rem, 10vw, 9rem);
+}
+.section--clients::before {
+  content: '';
+  position: absolute;
+  /* A pixel past the top, so no hairline of the page shows above it. */
+  inset: -1px 0 0;
+  z-index: -1;
+  pointer-events: none;
+  /*
+    No colour of its own. The two ends are the page's own two tones: the first
+    screen paints flat page colour over everything, grain included, while the
+    page below carries the grain, which reads as a slightly darker, textured
+    grey. That difference is the whole of the seam.
+
+    So this is flat page colour at the top — exactly as the first screen
+    finishes — thinning out over the depth of the section until the grain is
+    fully back by the foot. The colour of the one turns into the colour of the
+    other across a whole section rather than at a line.
+  */
+  background: linear-gradient(180deg,
+    var(--bg) 0%,
+    var(--bg) 16%,
+    color-mix(in srgb, var(--bg) 62%, transparent) 48%,
+    color-mix(in srgb, var(--bg) 22%, transparent) 74%,
+    transparent 90%);
+}
+
+/*
+  Logos arrive at every size and in every colour. One height and one strength
+  put them on the same footing, so the row reads as a single line of marks
+  rather than a scrapbook.
+*/
+.logo-strip .carousel-track {
+  grid-auto-columns: clamp(7.5rem, 15vw, 11rem);
+  align-items: center;
+  gap: clamp(1.75rem, 4.5vw, 3.5rem);
+  padding-inline-end: 0;
+  cursor: default;
+}
+.logo-cell {
+  display: grid;
+  place-items: center;
+  height: clamp(3.25rem, 6vw, 5rem);
+  min-width: 0;
+}
+.logo-cell img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  opacity: 0.75;
+  transition: opacity var(--mid) var(--ease);
+}
+.logo-cell img:hover { opacity: 1; }
+
+/* The row runs off both sides of the section, so it fades at both edges. */
+.logo-strip {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 7%, #000 93%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0%, #000 7%, #000 93%, transparent 100%);
+}
+
+/*
+  The label over the row. Quiet on purpose — it names what you are looking at
+  without competing with the logos underneath it, in a section that is meant to
+  be a handover rather than a stop.
+*/
+.clients-label {
+  margin: 0 0 clamp(1.25rem, 3vw, 2rem);
+  text-align: center;
+  color: var(--text-faint);
+}
+
+.clients-cta { margin-top: clamp(2rem, 4.5vw, 3rem); display: flex; justify-content: center; }
+.clients-empty { text-align: center; margin: 0; }
+.clients-edit { margin-top: 1.25rem; display: flex; justify-content: center; }
 
 /* ------------------------------------------------------ Our Work layout --- */
 

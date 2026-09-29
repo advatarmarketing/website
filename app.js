@@ -751,6 +751,51 @@ async function renderHome() {
     { n: '03', glyph: 'diamond', title: 'Branding', copy: 'Elevating your brand.', href: '/our-work#branding' },
   ];
 
+  /*
+    The section between the first screen and the latest work. Its whole job is
+    to carry one from the other: it starts on the first screen's own flat
+    colour, warms through the middle, and fades to nothing at the foot so the
+    page's grain comes back gradually instead of starting at a line.
+
+    Inside it, the logos of people we've worked for travel left to right, and a
+    way in sits underneath them.
+
+    The logos come from Client logos in edit mode. Until any are set, clients
+    who already have a logo on file stand in, so the row is never empty.
+  */
+  const logos = (settings.clientLogos?.length
+    ? settings.clientLogos
+    : clients.filter((client) => client.logoUrl).map((client) => ({ image: client.logoUrl, name: client.name })))
+    .filter((logo) => logo.image)
+    .slice(0, 60);
+
+  const clientSection = `
+    <section class="section section--clients" id="clients">
+      <div class="shell">
+        <p class="clients-label micro" data-reveal data-copy="home.clients.label">We've Worked With</p>
+        ${logos.length
+          ? `<div class="carousel logo-strip" data-carousel data-reveal>
+               <div class="carousel-track" data-autoscroll="true" data-drift="right">
+                 ${logos.map((logo) => `
+                   <div class="logo-cell">
+                     <img src="${assetUrl(logo.image, 500)}" alt="${esc(logo.name || '')}"
+                          loading="lazy" decoding="async">
+                   </div>`).join('')}
+               </div>
+             </div>`
+          : editOnly('<p class="tiny clients-empty">No client logos yet — add them below and they will travel across here.</p>')}
+        <div class="clients-cta" data-reveal>
+          <a class="btn btn--sheen" href="/contact">
+            <span data-copy="home.clients.cta">Join them — work with us</span>${icon('arrowRight')}
+          </a>
+        </div>
+        ${editOnly(`
+        <div class="clients-edit">
+          <button type="button" class="edit-chip" data-edit="client-logos">${icon('image')} Client logos</button>
+        </div>`)}
+      </div>
+    </section>`;
+
   const winCard = (client, index) => `
     <article class="win-card" data-reveal style="--i:${index}">
       ${mediaTile({
@@ -792,6 +837,8 @@ async function renderHome() {
         </div>
       </div>
     </section>
+
+    ${clientSection}
 
     <section class="section" id="recent-wins">
       <div class="shell">
@@ -851,7 +898,8 @@ function mountHome() {
     if (client) openClientModal(client);
   });
 
-  mountCarousel($('[data-carousel]'));
+  // The home page has two rows now — the client logos and the recent wins.
+  $$('[data-carousel]').forEach((node) => mountCarousel(node));
   mountHeroVideo();
   mountHeroParallax();
 }
@@ -2347,7 +2395,13 @@ function mountHeroParallax() {
   if (!hero || prefersReducedMotion()) return;
 
   const layers = [
-    { node: $('.hero-media'), rate: 0.35, base: '' },
+    /*
+      The film is deliberately NOT here. It is a panel with feathered edges
+      rather than a full-bleed backdrop, so drifting it downwards only slid it
+      towards the foot of the hero, where it was cut off square by the hero's
+      own edge. The gold layers still drift, which is where the depth comes
+      from anyway.
+    */
     { node: $('.hero-light'), rate: 0.28, base: '' },
     // The hand is vertically centred with translateY(-50%); the parallax offset
     // has to be added to that baseline rather than replacing it.
@@ -2466,7 +2520,16 @@ function mountCarousel(root) {
 
   /* ---- Slow continuous drift -------------------------------------------- */
   if (looping) {
+    // A row heading right starts one full set in, so there is something to its
+    // left to come into view rather than an immediate jump back.
+    if (track.dataset.drift === 'right') track.scrollLeft = loopWidth();
     const SPEED = 14;                 // px per second — a slow walk, not a slide
+    /*
+      Which way the row travels. Normally the cards march leftward, as a reel of
+      work reads. data-drift="right" sends them the other way, for the logo row
+      on the home page.
+    */
+    const DIR = track.dataset.drift === 'right' ? -1 : 1;
     const canHover = window.matchMedia('(hover: hover)').matches;
     let paused = false;
     let last = performance.now();
@@ -2531,9 +2594,13 @@ function mountCarousel(root) {
         const whole = Math.floor(carry);
         if (whole) {
           carry -= whole;
-          track.scrollLeft += whole;
+          track.scrollLeft += whole * DIR;
           const width = loopWidth();
-          if (width && track.scrollLeft >= width) track.scrollLeft -= width;
+          // Wrap at whichever end the row is heading for.
+          if (width) {
+            if (DIR > 0 && track.scrollLeft >= width) track.scrollLeft -= width;
+            else if (DIR < 0 && track.scrollLeft <= 0) track.scrollLeft += width;
+          }
         }
       }
       expected = track.scrollLeft;
@@ -3585,6 +3652,20 @@ function mountEditHandlers() {
       fields: [{
         name: 'workClientsLabel', label: 'Line', type: 'text',
         hint: 'e.g. "50+ clients." Leave it empty to show the real number of clients on the site.',
+      }],
+    }),
+
+    'client-logos': () => openSettingsEditor({
+      title: 'Client logos',
+      subtitle: 'The logos that travel across the home page, in the section under the first screen. '
+        + 'Leave this empty and the clients who already have a logo on file are used instead.',
+      fields: [{
+        name: 'clientLogos', label: 'Logos', type: 'rows', addLabel: 'Add a logo',
+        hint: 'A logo on a see-through background (PNG or WebP) sits best on both the light and the dark page.',
+        columns: [
+          { key: 'image', label: 'Logo image', placeholder: 'Paste a Cloudinary or other image link' },
+          { key: 'name', label: 'Who it belongs to', placeholder: 'Read aloud to anyone using a screen reader' },
+        ],
       }],
     }),
 
