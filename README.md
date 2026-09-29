@@ -349,6 +349,28 @@ Two flags drive where a client appears:
 - `isCaseStudy` — the Results "see more" view. Defaults to `isRecentWin`, so featuring a
   client as a case study later is a single checkbox in edit mode.
 
+## Client logos on the home page
+
+Between the first screen and the page under it there is a band that joins the two: the
+logos of people you've worked for drifting across it, and a **Join them — work with us**
+button underneath that goes to the contact page.
+
+**Client logos** in edit mode (on the home page, under the band) sets what is in it. Press
+**Add a logo**, paste the image link, and say who it belongs to — that name is not shown on
+screen; it is what a screen reader says in place of the picture.
+
+- A logo on a see-through background (PNG or WebP) sits best, since the page can be light
+  or dark.
+- They are all shown at the same height and the same strength, so the row reads as one line
+  of marks rather than a scrapbook.
+- With more logos than fit across the screen the row drifts by itself; with only a few it
+  sits still.
+- Leave the list empty and any clients that already have a logo on file are used instead.
+  With neither, the band is just the button.
+
+The button's wording can be changed with **Edit text**, like any other fixed text on the
+site.
+
 ## The background of the home page
 
 Set under **Edit hero assets**. From the back to the front, the first screen is:

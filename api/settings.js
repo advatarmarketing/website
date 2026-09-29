@@ -92,6 +92,11 @@ function sanitize(settings) {
       }))
       .filter((row) => row.industry && row.video),
     workClientsLabel: clean(input.workClientsLabel, 80),
+    /* The logos that drift across the home page under the first screen. */
+    clientLogos: (Array.isArray(input.clientLogos) ? input.clientLogos : [])
+      .slice(0, 60)
+      .map((row) => ({ image: cleanUrl(row?.image), name: clean(row?.name, 80) }))
+      .filter((row) => row.image),
     /* Look Inside: an image beside each step, keyed by step number. */
     lookInsideImages: (Array.isArray(input.lookInsideImages) ? input.lookInsideImages : [])
       .slice(0, 40)

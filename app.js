@@ -751,6 +751,46 @@ async function renderHome() {
     { n: '03', glyph: 'diamond', title: 'Branding', copy: 'Elevating your brand.', href: '/our-work#branding' },
   ];
 
+  /*
+    The band where the first screen meets the page proper: the logos of people
+    we've worked for, drifting past, and a way in underneath.
+
+    The logos come from Client logos in edit mode. Until any are set there, the
+    clients who already have a logo on file stand in, so the band is never a row
+    of nothing.
+  */
+  const logos = (settings.clientLogos?.length
+    ? settings.clientLogos
+    : clients.filter((client) => client.logoUrl).map((client) => ({ image: client.logoUrl, name: client.name })))
+    .filter((logo) => logo.image)
+    .slice(0, 60);
+
+  const clientStrip = `
+    <section class="joiner" id="clients">
+      <div class="shell">
+        ${logos.length
+          ? `<div class="carousel logo-strip" data-carousel data-reveal>
+               <div class="carousel-track" data-autoscroll="true">
+                 ${logos.map((logo) => `
+                   <div class="logo-cell">
+                     <img src="${assetUrl(logo.image, 400)}" alt="${esc(logo.name || '')}"
+                          loading="lazy" decoding="async">
+                   </div>`).join('')}
+               </div>
+             </div>`
+          : editOnly('<p class="tiny joiner-empty">No client logos yet — add them below and they will drift across here.</p>')}
+        <div class="joiner-cta" data-reveal>
+          <a class="btn btn--gold" href="/contact">
+            <span data-copy="home.clients.cta">Join them — work with us</span>${icon('arrowRight')}
+          </a>
+        </div>
+        ${editOnly(`
+        <div class="joiner-edit">
+          <button type="button" class="edit-chip" data-edit="client-logos">${icon('image')} Client logos</button>
+        </div>`)}
+      </div>
+    </section>`;
+
   const winCard = (client, index) => `
     <article class="win-card" data-reveal style="--i:${index}">
       ${mediaTile({
@@ -791,7 +831,7 @@ async function renderHome() {
           <p data-copy="home.hero.note">An impact-focused agency for clients who want the whole picture handled, properly.</p>
         </div>
       </div>
-    </section>
+    ${clientStrip}
 
     <section class="section" id="recent-wins">
       <div class="shell">
@@ -851,7 +891,8 @@ function mountHome() {
     if (client) openClientModal(client);
   });
 
-  mountCarousel($('[data-carousel]'));
+  // The home page has two rows now — the logos and the recent wins.
+  $$('[data-carousel]').forEach((node) => mountCarousel(node));
   mountHeroVideo();
   mountHeroParallax();
 }
@@ -3585,6 +3626,20 @@ function mountEditHandlers() {
       fields: [{
         name: 'workClientsLabel', label: 'Line', type: 'text',
         hint: 'e.g. "50+ clients." Leave it empty to show the real number of clients on the site.',
+      }],
+    }),
+
+    'client-logos': () => openSettingsEditor({
+      title: 'Client logos',
+      subtitle: 'The logos that drift across the home page, under the first screen. '
+        + 'Leave this empty and the clients who already have a logo on file are used instead.',
+      fields: [{
+        name: 'clientLogos', label: 'Logos', type: 'rows', addLabel: 'Add a logo',
+        hint: 'A logo on a see-through background (PNG or WebP) sits best on both the light and the dark page.',
+        columns: [
+          { key: 'image', label: 'Logo image', placeholder: 'Paste a Cloudinary or other image link' },
+          { key: 'name', label: 'Who it belongs to', placeholder: 'Read aloud to anyone using a screen reader' },
+        ],
       }],
     }),
 
