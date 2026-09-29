@@ -1412,40 +1412,87 @@ video.hero-hand { height: auto; object-fit: contain; }
   Our Work, inside an industry: a row of that industry's reels along the top,
   then its clients as a spaced-out list you can open.
 */
-.industry-reels { padding-block: 0.5rem 1.75rem; }
+/*
+  The row at the top of an industry is a taster, not the work itself — the
+  clients under it hold that. Its reels are therefore smaller than the ones on
+  the home page: vertical video is tall, and at the home page's size this one
+  row filled most of a screen on its own.
+*/
+.industry-reels { padding-block: 0.5rem 1.5rem; }
+/* Beats .carousel--reels .carousel-track, which is declared further down. */
+.industry-reels .carousel--reels .carousel-track { grid-auto-columns: clamp(7.5rem, 18vw, 9.5rem); }
+.industry-reels .video-card figcaption { font-size: 0.75rem; }
 
-.client-table { margin: 0; padding: 0; list-style: none; }
-.client-table > li + li { border-top: 1px solid var(--hairline-soft); }
+/*
+  Clients across the page rather than down it: two or three to a line, with a
+  faint rule between them. One long column meant a great deal of scrolling for
+  a list whose entries are only a name and a number.
+
+  The cells carry the lines, on their top and left edge. That gives every cell
+  a left-hand line including the first in each row, which would draw a stray
+  rule down the left of the page — so the whole grid is pulled one pixel left,
+  putting that first line just outside the text it lines up with.
+*/
+.client-table {
+  margin: 0 0 0 -1px;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 21rem), 1fr));
+}
+.client-row {
+  border-top: 1px solid var(--hairline-soft);
+  border-left: 1px solid var(--hairline-soft);
+  min-width: 0;
+}
+/*
+  An open client takes the full width of the grid, so its reels have room to
+  sit side by side instead of stacking inside one narrow cell. Where :has isn't
+  understood the panel simply opens within its own cell, which still works.
+*/
+.client-row:has(> .disclosure-panel[data-open='true']) { grid-column: 1 / -1; }
 .client-table-empty { padding-block: 0.25rem 1.25rem; }
 
+/*
+  Inside a cell there is no room for a name, a tag and a count on one line, so
+  the name and its arrow take the first line and the rest sits under them.
+*/
 .client-row-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.85rem;
+  gap: 0.15rem 0.75rem;
   width: 100%;
   min-height: 52px;
-  padding: 1rem 0;
+  padding: 0.85rem 1.1rem 0.9rem;
   background: none;
   border: 0;
   text-align: left;
   color: inherit;
   cursor: pointer;
-  transition: color var(--mid) var(--ease), padding-left var(--mid) var(--ease);
+  transition: color var(--mid) var(--ease), background var(--mid) var(--ease);
 }
-.client-row-head:hover { color: var(--gold-text); padding-left: 0.4rem; }
+.client-row-head:hover,
 .client-row-head[aria-expanded='true'] { color: var(--gold-text); }
+.client-row-head:hover { background: rgba(255, 255, 255, 0.022); }
+:root[data-theme='light'] .client-row-head:hover { background: rgba(20, 16, 10, 0.022); }
 .client-row-head[aria-expanded='true'] .icon { transform: rotate(90deg); }
 .client-row-head .icon { transition: transform var(--mid) var(--ease); flex: none; color: var(--text-lo); }
 
 .client-row-name {
+  grid-column: 1;
+  grid-row: 1;
   font-family: var(--font-display);
   font-weight: 400;
-  font-size: clamp(1rem, 1.5vw, 1.1875rem);
+  font-size: clamp(0.9375rem, 1.2vw, 1.0625rem);
   letter-spacing: -0.015em;
+  overflow-wrap: anywhere;
 }
-.client-row-count { margin-left: auto; white-space: nowrap; color: var(--text-faint); }
+.client-row-head > .icon { grid-column: 2; grid-row: 1; }
+.client-row-head .tag--soft { grid-column: 1 / -1; justify-self: start; max-width: 100%; }
+.client-row-count { grid-column: 1 / -1; white-space: nowrap; color: var(--text-faint); }
 
-.client-row-body { padding-block: 0.25rem 1.5rem; display: grid; gap: 1rem; }
+.client-row-body { padding: 0.25rem 1.1rem 1.5rem; display: grid; gap: 1rem; }
 .client-row-note { margin: 0; max-width: 60ch; color: var(--text-lo); font-size: 0.9375rem; }
 
 /*
@@ -1488,9 +1535,8 @@ video.hero-hand { height: auto; object-fit: contain; }
   align-items: baseline;
   justify-content: space-between;
   gap: 1rem;
-  margin: 0 0 0.35rem;
-  padding-bottom: 0.6rem;
-  border-bottom: 1px solid var(--hairline);
+  margin: 0 0 0.1rem;
+  padding-bottom: 0.5rem;
   font-family: var(--font-ui);
   font-size: 0.75rem;
   font-weight: 500;
@@ -1504,22 +1550,8 @@ video.hero-hand { height: auto; object-fit: contain; }
   color: var(--text-faint);
   font-size: 0.75rem;
 }
-/*
-  On a phone the row becomes two lines: the name with its chevron on the first,
-  the tag and the count under it — rather than the chevron dropping onto a line
-  of its own below everything else.
-*/
 @media (max-width: 640px) {
-  .client-row-head {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 0.3rem 0.75rem;
-  }
-  .client-row-name { grid-column: 1; grid-row: 1; }
-  .client-row-head > .icon { grid-column: 2; grid-row: 1; }
-  .client-row-head .tag--soft { grid-column: 1 / -1; justify-self: start; max-width: 100%; }
-  .client-row-count { grid-column: 1 / -1; margin-left: 0; }
+  .client-row-head { padding-inline: 0.9rem; }
 }
 
 /* ============================================ Case studies (R8) ========== */
@@ -1662,6 +1694,70 @@ video.hero-hand { height: auto; object-fit: contain; }
   color: var(--text-lo);
 }
 .field ::placeholder { color: var(--text-faint); }
+
+/*
+  A repeating field: one card per entry, an Add button under them. The inner
+  labels are sentence case and small — the uppercase label belongs to the field
+  as a whole, and repeating it in capitals on every card was shouting.
+*/
+/* A list of cards needs the width of the dialog, not one column of the grid. */
+.field--rows { gap: 0.75rem; grid-column: 1 / -1; }
+.rows { display: grid; gap: 0.6rem; }
+.rows:empty { display: none; }
+
+.rows-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: end;
+  padding: 0.85rem;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+}
+:root[data-theme='light'] .rows-row { background: rgba(20, 16, 10, 0.025); }
+
+.rows-cells {
+  display: grid;
+  gap: 0.6rem 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  min-width: 0;
+}
+.rows-cell { display: grid; gap: 0.3rem; min-width: 0; }
+/* A short value — a number, a word from a menu — doesn't need a full column. */
+.rows-cell--narrow { grid-column: span 1; max-width: 12rem; }
+.rows-cell > .tiny {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-faint);
+}
+.rows-select { position: relative; display: block; }
+.rows-select .icon {
+  position: absolute;
+  right: 0.85rem; top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--text-lo);
+}
+
+.rows-tools { display: flex; gap: 0.3rem; align-items: center; }
+.rows-tools .icon-btn { width: 36px; height: 36px; min-height: 36px; }
+/* There is no up-arrow in the icon set, so the down one is turned over. */
+.rows-tools [data-row-move='-1'] .icon { transform: rotate(180deg); }
+.rows-tools [data-row-del]:hover { color: #E5705E; border-color: rgba(229, 112, 94, 0.4); }
+
+/* Shown only while the list has nothing in it. */
+.rows-empty { margin: 0; display: none; }
+.field--rows[data-empty='true'] .rows-empty { display: block; }
+
+@media (max-width: 560px) {
+  .rows-row { grid-template-columns: minmax(0, 1fr); }
+  .rows-tools { justify-content: flex-end; }
+  .rows-cell--narrow { max-width: none; }
+}
+
 
 /* Honeypot — off-screen, never focusable by a real user. */
 .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }

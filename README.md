@@ -399,6 +399,19 @@ Leave the background boxes empty and the gold hero is used on its own, exactly a
 the amber light is pure CSS, recomposes on a phone so the headline always sits on dark
 ground, and needs no files at all.
 
+## Lists in edit mode
+
+Anywhere edit mode holds a list — a client's videos, the results row, the hiring gallery,
+the Look Inside images, the industry reels — it works the same way:
+
+- **Add** puts a fresh, empty entry at the bottom and drops the cursor in its first box,
+  ready to paste.
+- The **arrows** on an entry move it up or down. Order on screen follows order in the list.
+- The **bin** removes it.
+- A box marked *(optional)* can be left empty, and nothing is shown in its place.
+- An entry left completely blank is thrown away when you save, so pressing Add and
+  changing your mind costs nothing.
+
 ## Videos
 
 Every video field in edit mode — a client's videos, their **Selected reel**, and the hiring
@@ -474,14 +487,18 @@ up to 12 of them, showing the reel chosen for each.
 
 **See more by industry** — each industry opens to show:
 
-1. a row of that industry's reels, and
-2. its clients as a list you can open.
+1. a row of that industry's reels, as small previews, and
+2. its clients as a grid.
 
-Open a client and you see their note, if one has been written for them, and their videos.
-Reels are vertical, so each one takes a single tile's width — a client with one reel gets one
-tile, not a reel stretched across the page.
+The clients run across the page, two or three to a line depending on the width of the
+window, with a faint rule between them — one long column meant a great deal of scrolling for
+a list whose entries are only a name and a number.
 
-**View all client work** — the same client list, but every industry at once. Opening one of
+Open a client and their cell takes the full width of the grid, showing their note if one has
+been written for them, and their videos. Reels are vertical, so each takes a single tile's
+width — a client with one reel gets one tile, not a reel stretched across the page.
+
+**View all client work** — the same grid, but every industry at once. Opening one of
 these two closes the other, so what you pressed always appears directly underneath it.
 
 ### Arranging Our Work
@@ -503,12 +520,10 @@ Four buttons appear under the two above when you are in edit mode.
   different industry. An industry typed here shows up even before any clients are in it, so
   you can put a new one in place first. Leave the box empty to use the built-in order
   (Personal Brands & Creators first, Car & Transport last).
-- **Industry reels** — the row of videos at the top of an industry. One video per line:
-
-      Food & Beverage | https://res.cloudinary.com/…/video/upload/… | A caption
-
-  To move a video, move its line. To remove one, delete its line. Leave an industry out of
-  this box entirely and it shows one reel from each of its clients instead, which is what
+- **Industry reels** — the row of videos at the top of an industry. Press **Add a reel**,
+  pick the industry from the menu, paste the link, and add a caption if you want one. The
+  arrows on a reel move it up or down the row; the bin removes it. Leave an industry out of
+  this list entirely and it shows one reel from each of its clients instead, which is what
   happens until you set anything here.
 
 Inside **View all client work** there is one more: **Edit this line**, which sets the line

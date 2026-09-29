@@ -3040,10 +3040,51 @@ async function openClientSync() {
 /* ---------------------------------------------------- Field definitions --- */
 
 /*
-  A tiny schema-driven form builder. `rows` renders a textarea where each line is
-  "col1 | col2 | ..." — it keeps repeating structures (videos, stats, gallery)
-  editable without building a drag-and-drop UI.
+  A tiny schema-driven form builder. `rows` is the repeating one — videos,
+  results, gallery entries — and it renders a real list: a card per entry with a
+  box per column, an Add button under it, and buttons on each card to move it up
+  or down or throw it away. It used to be a single textarea of lines separated
+  by | characters, which meant typing punctuation in the right places to add one
+  video.
 */
+
+/** One card in a `rows` field. Also used when the Add button makes a new one. */
+function rowHtml(field, row = {}) {
+  const cell = (column) => {
+    const value = row?.[column.key] ?? '';
+    if (column.options) {
+      // An option that isn't in the list any more still has to be shown, or
+      // saving an untouched row would quietly change it.
+      const options = column.options.includes(String(value)) || !value
+        ? column.options
+        : [...column.options, String(value)];
+      return `<span class="field--select rows-select">
+                <select data-key="${esc(column.key)}">
+                  ${options.map((option) =>
+                    `<option value="${esc(option)}" ${String(value) === String(option) ? 'selected' : ''}>${esc(option)}</option>`).join('')}
+                </select>${icon('chevronDown')}
+              </span>`;
+    }
+    return `<input type="${esc(column.type === 'number' ? 'number' : 'text')}" data-key="${esc(column.key)}"
+                   value="${esc(value)}" ${column.placeholder ? `placeholder="${esc(column.placeholder)}"` : ''}>`;
+  };
+
+  return `
+    <div class="rows-row">
+      <div class="rows-cells">
+        ${field.columns.map((column) => `
+          <label class="rows-cell${column.narrow ? ' rows-cell--narrow' : ''}">
+            <span class="tiny">${esc(column.label)}</span>
+            ${cell(column)}
+          </label>`).join('')}
+      </div>
+      <div class="rows-tools">
+        <button type="button" class="icon-btn" data-row-move="-1" aria-label="Move up">${icon('chevronDown')}</button>
+        <button type="button" class="icon-btn" data-row-move="1" aria-label="Move down">${icon('chevronDown')}</button>
+        <button type="button" class="icon-btn" data-row-del aria-label="Remove">${icon('trash')}</button>
+      </div>
+    </div>`;
+}
 
 function fieldHtml(field, value) {
   const id = `f-${field.name.replace(/\W/g, '-')}`;
@@ -3076,13 +3117,13 @@ function fieldHtml(field, value) {
     }
 
     case 'rows': {
-      const keys = field.columns.map((column) => column.key);
-      const text = (Array.isArray(value) ? value : [])
-        .map((row) => keys.map((key) => row?.[key] ?? '').join(' | '))
-        .join('\n');
-      return `<div class="field">${label}<textarea id="${id}" name="${esc(field.name)}" rows="6">${esc(text)}</textarea>
-                <p class="tiny" style="margin:0">One per line, columns separated by <code>|</code> —
-                  ${esc(field.columns.map((column) => column.label).join(' | '))}</p></div>`;
+      const list = Array.isArray(value) ? value : [];
+      return `<div class="field field--rows">${label}
+                <div class="rows" data-rows="${esc(field.name)}">${list.map((row) => rowHtml(field, row)).join('')}</div>
+                <p class="rows-empty tiny">Nothing here yet.</p>
+                <div><button type="button" class="btn btn--sm" data-row-add="${esc(field.name)}">
+                  ${icon('plus')}${esc(field.addLabel || 'Add another')}</button></div>
+                ${hint}</div>`;
     }
 
     default:
@@ -3095,6 +3136,20 @@ function fieldHtml(field, value) {
 
 /** Pull a typed value back out of the form for one field. */
 function fieldValue(form, field) {
+  /*
+    A rows field is a list of cards rather than one named input, so it is read
+    from the cards themselves. A card left completely blank — Add pressed and
+    then thought better of — is dropped rather than saved as an empty entry.
+  */
+  if (field.type === 'rows') {
+    const host = $(`[data-rows="${CSS.escape(field.name)}"]`, form);
+    if (!host) return undefined;
+    return $$('.rows-row', host)
+      .map((row) => Object.fromEntries(field.columns.map((column) =>
+        [column.key, $(`[data-key="${CSS.escape(column.key)}"]`, row)?.value.trim() ?? ''])))
+      .filter((row) => field.columns.some((column) => !column.options && row[column.key]));
+  }
+
   const input = form.elements[field.name];
   if (!input) return undefined;
 
@@ -3110,16 +3165,6 @@ function fieldValue(form, field) {
     case 'lines':
       return input.value.split('\n').map((line) => line.trim()).filter(Boolean);
 
-    case 'rows':
-      return input.value
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line) => {
-          const cells = line.split('|').map((cell) => cell.trim());
-          return Object.fromEntries(field.columns.map((column, index) => [column.key, cells[index] ?? '']));
-        });
-
     default:
       return input.value.trim();
   }
@@ -3128,6 +3173,48 @@ function fieldValue(form, field) {
 const buildForm = (fields, record) =>
   `<div class="editor-grid">${fields.map((field) =>
     fieldHtml(field, getPath(record ?? {}, field.name))).join('')}</div>`;
+
+/**
+ * Wires up the Add / move / remove buttons on every rows field in a form.
+ * Called after the form's markup is in the page.
+ */
+function mountForm(form, fields) {
+  fields.filter((field) => field.type === 'rows').forEach((field) => {
+    const host = $(`[data-rows="${CSS.escape(field.name)}"]`, form);
+    if (!host) return;
+    const wrap = host.closest('.field');
+    const sync = () => { wrap.dataset.empty = String(!host.children.length); };
+
+    $(`[data-row-add="${CSS.escape(field.name)}"]`, form)?.addEventListener('click', () => {
+      host.insertAdjacentHTML('beforeend', rowHtml(field));
+      sync();
+      // Straight into the first box of the new card, ready to paste.
+      host.lastElementChild?.querySelector('input, select')?.focus();
+    });
+
+    host.addEventListener('click', (event) => {
+      const row = event.target.closest('.rows-row');
+      if (!row) return;
+
+      if (event.target.closest('[data-row-del]')) {
+        row.remove();
+        sync();
+        return;
+      }
+
+      const move = event.target.closest('[data-row-move]');
+      if (!move) return;
+      const up = Number(move.dataset.rowMove) < 0;
+      const sibling = up ? row.previousElementSibling : row.nextElementSibling;
+      if (!sibling) return;
+      if (up) sibling.before(row);
+      else sibling.after(row);
+      move.focus();
+    });
+
+    sync();
+  });
+}
 
 const readForm = (form, fields) =>
   fields.reduce((acc, field) => {
@@ -3221,6 +3308,7 @@ function openRecordEditor({ title, fields, record, endpoint, method, onDone }) {
     onMount(host) {
       const form = $('#record-form', host);
       const status = $('.form-status', form);
+      mountForm(form, fields);
 
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -3260,6 +3348,7 @@ function openSettingsEditor({ title, subtitle, fields }) {
     onMount(host) {
       const form = $('#settings-form', host);
       const status = $('.form-status', form);
+      mountForm(form, fields);
 
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -3309,11 +3398,11 @@ const CLIENT_FIELDS = [
     hint: 'The reel shown for this client on Our Work — a Google Drive or Cloudinary video link, either one of their videos below or a separate upload. Leave blank to use their first video. It is left out of their carousel, so it never shows twice.',
   },
   {
-    name: 'videos', label: 'Videos', type: 'rows',
+    name: 'videos', label: 'Videos', type: 'rows', addLabel: 'Add a reel',
     columns: [
-      { key: 'title', label: 'Title' },
-      { key: 'driveFileId', label: 'Video link (Google Drive or Cloudinary)' },
-      { key: 'kind', label: 'reel / bts' },
+      { key: 'driveFileId', label: 'Video link', placeholder: 'Paste a Google Drive or Cloudinary link' },
+      { key: 'title', label: 'Caption (optional)', placeholder: 'Shown under the reel' },
+      { key: 'kind', label: 'Kind', options: ['reel', 'bts'], narrow: true },
     ],
   },
 ];
@@ -3398,8 +3487,11 @@ function mountEditHandlers() {
     results: () => openSettingsEditor({
       title: 'Results',
       fields: [{
-        name: 'resultsStats', label: 'Results', type: 'rows',
-        columns: [{ key: 'label', label: 'Label' }, { key: 'value', label: 'Number' }],
+        name: 'resultsStats', label: 'Results', type: 'rows', addLabel: 'Add a result',
+        columns: [
+          { key: 'label', label: 'Label', placeholder: 'e.g. Views in 90 days' },
+          { key: 'value', label: 'Number', placeholder: 'e.g. 2.4M', narrow: true },
+        ],
       }],
     }),
 
@@ -3427,11 +3519,11 @@ function mountEditHandlers() {
       title: 'Hiring gallery',
       subtitle: IMAGE_HINT,
       fields: [{
-        name: 'hiringGallery', label: 'Behind the scenes', type: 'rows',
+        name: 'hiringGallery', label: 'Behind the scenes', type: 'rows', addLabel: 'Add a photo or video',
         columns: [
-          { key: 'imageUrl', label: 'Image URL' },
-          { key: 'driveFileId', label: 'or a video link (Drive or Cloudinary)' },
-          { key: 'caption', label: 'Caption' },
+          { key: 'imageUrl', label: 'Image link', placeholder: 'Paste a Cloudinary or other image link' },
+          { key: 'driveFileId', label: 'or a video link', placeholder: 'Google Drive or Cloudinary' },
+          { key: 'caption', label: 'Caption (optional)' },
         ],
       }],
     }),
@@ -3478,11 +3570,11 @@ function mountEditHandlers() {
       subtitle: 'The row of videos at the top of an industry, in the order you list them. '
         + 'Leave an industry out and it shows one reel from each of its clients instead.',
       fields: [{
-        name: 'industryReels', label: 'Reels', type: 'rows',
-        hint: 'To move a video, move its line. To remove one, delete its line.',
+        name: 'industryReels', label: 'Reels', type: 'rows', addLabel: 'Add a reel',
+        hint: 'Use the arrows on a reel to move it up or down the row it belongs to.',
         columns: [
-          { key: 'industry', label: 'Industry' },
-          { key: 'video', label: 'Video link (Google Drive or Cloudinary)' },
+          { key: 'industry', label: 'Industry', options: industryOptions(), narrow: true },
+          { key: 'video', label: 'Video link', placeholder: 'Paste a Google Drive or Cloudinary link' },
           { key: 'caption', label: 'Caption (optional)' },
         ],
       }],
@@ -3506,10 +3598,10 @@ function mountEditHandlers() {
       title: 'Look Inside images',
       subtitle: 'One line per image: the step number, then an image URL or a Google Drive link. Drive files must be shared as "Anyone with the link".',
       fields: [{
-        name: 'lookInsideImages', label: 'Step images', type: 'rows',
+        name: 'lookInsideImages', label: 'Step images', type: 'rows', addLabel: 'Add an image',
         columns: [
-          { key: 'step', label: 'Step (1–10)' },
-          { key: 'image', label: 'Image URL or Drive link' },
+          { key: 'step', label: 'Step', type: 'number', narrow: true },
+          { key: 'image', label: 'Image link', placeholder: 'Cloudinary, Google Drive, or any image link' },
           { key: 'caption', label: 'Caption (optional)' },
         ],
       }],
@@ -3532,6 +3624,13 @@ function mountEditHandlers() {
  *  - Tag     the small outlined label beside the client's name. Empty means
  *            no label.
  */
+/** The industries to choose from, plus any an existing reel is already filed under. */
+function industryOptions() {
+  const known = industriesOf(state.clients ?? []).map(([name]) => name);
+  const used = (state.settings?.industryReels ?? []).map((row) => row.industry).filter(Boolean);
+  return [...new Set([...known, ...used])];
+}
+
 function openClientOrderEditor() {
   const clients = state.clients ?? [];
   const groups = industriesOf(clients);
