@@ -1693,6 +1693,17 @@ video.hero-hand { height: auto; object-fit: contain; }
 }
 @media (min-width: 900px) { .contact-grid { grid-template-columns: 1fr auto 1fr; } }
 
+/*
+  The two ways to get hold of us, stacked: Enquire now over WhatsApp. They sit
+  in a column and take only the width they need, so neither stretches across
+  the page on a wide screen.
+*/
+.contact-actions {
+  display: grid;
+  gap: 0.85rem;
+  justify-items: start;
+}
+
 /* Vertical "Or" divider on wide screens, horizontal when stacked. */
 .or-divider {
   display: grid;

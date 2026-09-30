@@ -296,6 +296,9 @@ const NAV_ITEMS = [
 */
 const LOGIN_URL = 'https://app.advatar.co.uk';
 
+/** The enquiry form, in that same app. Linked from the contact page. */
+const ENQUIRE_URL = 'https://app.advatar.co.uk/enquire';
+
 const loginLink = (className = 'btn btn--sm btn--login nav-login') => `
   <a class="${className}" href="${LOGIN_URL}">
     ${icon('lock')}<span data-copy="nav.login">Login</span>
@@ -1706,6 +1709,15 @@ async function renderContact() {
   const settings = await load('settings');
   const { whatsappNumber, email } = settings.contact ?? {};
 
+  /*
+    The enquiry form lives in the separate app at app.advatar.co.uk, so this is
+    an ordinary link out rather than anything this site handles. It opens in a
+    new tab, like the WhatsApp button beside it, so nobody loses the page they
+    were reading.
+  */
+  const enquire = `<a class="btn btn--sheen" href="${ENQUIRE_URL}" target="_blank" rel="noopener noreferrer">
+      <span data-copy="contact.enquire-cta">Enquire now</span>${icon('arrowRight')}</a>`;
+
   const whatsapp = whatsappNumber
     ? `<a class="btn btn--gold" href="https://wa.me/${esc(whatsappNumber)}" target="_blank" rel="noopener noreferrer">
          ${icon('whatsapp')}<span data-copy="contact.whatsapp-cta">WhatsApp us</span></a>`
@@ -1727,7 +1739,7 @@ async function renderContact() {
       <div class="shell contact-grid">
         <div class="stack-2" data-reveal>
           <p class="lede" data-copy="contact.whatsapp-lede">WhatsApp us and we'll get back to you before you take a bite out of your next meal.</p>
-          <div>${whatsapp}</div>
+          <div class="contact-actions">${enquire}${whatsapp}</div>
         </div>
 
         <div class="or-divider" aria-hidden="true" data-reveal><span data-copy="contact.or">Or</span></div>
