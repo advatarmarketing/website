@@ -778,8 +778,8 @@ async function renderHome() {
                <div class="carousel-track" data-autoscroll="true" data-drift="right">
                  ${logos.map((logo) => `
                    <div class="logo-cell">
-                     <img src="${assetUrl(logo.image, 500)}" alt="${esc(logo.name || '')}"
-                          loading="lazy" decoding="async">
+                     <span class="logo-mark" role="img" aria-label="${esc(logo.name || 'Client logo')}"
+                           data-logo="${esc(logo.image)}"></span>
                    </div>`).join('')}
                </div>
              </div>`
@@ -889,6 +889,241 @@ async function renderHome() {
   </main>`;
 }
 
+/* ---------------------------------------------------------------------------
+   Client logos, redrawn as one-colour marks.
+
+   Logos arrive however the client happened to send them: black on a white
+   box, white on a black box, colour on nothing, a screenshot with a plate
+   behind it. Shown as they are, the row is a scrapbook — and half of them
+   vanish in one theme or the other.
+
+   So the page doesn't show the picture. It reads it, works out which pixels
+   are the logo and which are whatever it was sitting on, and keeps only the
+   shape. That shape is used as a stencil, and the page's own text colour is
+   poured through it — so the same logo is near-black in light mode and
+   near-white in dark mode, and switching theme changes it instantly with
+   nothing redrawn.
+
+   HOW IT TELLS THE LOGO FROM ITS BACKGROUND
+   1. The border. Whatever colour runs round the edge of the picture is the
+      background (or, if the edge is see-through, transparency is).
+   2. The plate. Many logos sit on a filled box or disc of their own inside
+      that — the dark badge behind "Mehfil", the white circle behind "Eid". If
+      what's left is mostly one colour and fills most of its own outline, that
+      colour is a plate too, and it goes, leaving the lettering on it. If
+      taking it away would leave almost nothing, it wasn't a plate — it was the
+      logo, a solid mark — and it stays.
+   3. Softness. A pixel halfway between the logo and the background becomes
+      half see-through, so edges stay smooth instead of turning jagged.
+
+   HOW THEY ARE MADE THE SAME SIZE
+   Empty margins are cut off first, so a logo floating in a big square canvas
+   isn't drawn tiny. Then each logo is given the same AREA rather than the
+   same height: a long wordmark and a square badge set to one height make the
+   wordmark look enormous; set to one area, they look like equals. Nothing is
+   cropped — the whole mark always fits inside its space.
+
+   If a picture can't be read (another site that won't allow it), it is shown
+   as it is, greyed, rather than not at all.
+--------------------------------------------------------------------------- */
+
+const logoMarks = new Map();       // image address → the finished stencil, drawn once per visit
+
+function drawLogoMark(node) {
+  const source = node.dataset.logo;
+  if (!logoMarks.has(source)) logoMarks.set(source, traceLogo(source));
+  logoMarks.get(source).then(
+    ({ url, ratio }) => {
+      node.style.setProperty('--logo-mask', `url("${url}")`);
+      // The square root is what gives every logo the same area (see above).
+      node.style.setProperty('--logo-wide', Math.sqrt(ratio).toFixed(3));
+      node.style.setProperty('--logo-ratio', ratio.toFixed(3));
+      node.dataset.state = 'ready';
+    },
+    () => {
+      node.innerHTML = `<img src="${assetUrl(source, 500)}" alt="" loading="lazy" decoding="async">`;
+      node.dataset.state = 'plain';
+    },
+  );
+}
+
+function traceLogo(source) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.decoding = 'async';
+    image.onerror = reject;
+    image.onload = () => {
+      try { resolve(stencilFrom(image)); } catch (error) { reject(error); }
+    };
+    // A lossless copy: a JPEG-style one smears the edges the stencil is cut from.
+    const match = CLOUDINARY.exec(source);
+    image.src = match && !CLOUDINARY_TRANSFORM.test(match[3])
+      ? `${match[1]}/f_png,c_limit,w_640,h_640/${match[3]}`
+      : source;
+  });
+}
+
+function stencilFrom(image) {
+  const MAX = 640;
+  const scale = Math.min(1, MAX / Math.max(image.naturalWidth, image.naturalHeight));
+  const w = Math.max(1, Math.round(image.naturalWidth * scale));
+  const h = Math.max(1, Math.round(image.naturalHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(image, 0, 0, w, h);
+  const px = ctx.getImageData(0, 0, w, h).data;     // throws if the site won't allow it → shown plain
+
+  // Colours are grouped coarsely so JPEG noise doesn't split one colour into many.
+  const bucket = (i) => ((px[i] >> 4) << 8) | ((px[i + 1] >> 4) << 4) | (px[i + 2] >> 4);
+  const average = (indices) => {
+    const sum = [0, 0, 0];
+    for (const i of indices) { sum[0] += px[i]; sum[1] += px[i + 1]; sum[2] += px[i + 2]; }
+    return sum.map((value) => value / indices.length);
+  };
+  const commonest = (indices) => {
+    const groups = new Map();
+    for (const i of indices) {
+      const key = bucket(i);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(i);
+    }
+    let best = [];
+    for (const group of groups.values()) if (group.length > best.length) best = group;
+    return { colour: average(best), share: best.length / indices.length };
+  };
+  const distance = (i, colour) => Math.hypot(px[i] - colour[0], px[i + 1] - colour[1], px[i + 2] - colour[2]);
+  // Near a background colour → gone; clearly different → solid; in between → soft.
+  const ramp = (d) => Math.min(1, Math.max(0, (d - 22) / 48));
+
+  // 1. The border.
+  const edge = [];
+  for (let x = 0; x < w; x += 1) edge.push(x * 4, ((h - 1) * w + x) * 4);
+  for (let y = 0; y < h; y += 1) edge.push(y * w * 4, (y * w + w - 1) * 4);
+  const clearEdge = edge.filter((i) => px[i + 3] < 40).length / edge.length > 0.4;
+  const backgrounds = clearEdge ? [] : [commonest(edge.filter((i) => px[i + 3] >= 40)).colour];
+
+  const alphaOf = (colours) => {
+    const alpha = new Float32Array(w * h);
+    for (let p = 0, i = 0; p < alpha.length; p += 1, i += 4) {
+      let keep = px[i + 3] / 255;
+      for (const colour of colours) keep = Math.min(keep, ramp(distance(i, colour)));
+      alpha[p] = keep;
+    }
+    return alpha;
+  };
+  const outline = (alpha) => {
+    let left = w, top = h, right = -1, bottom = -1, count = 0;
+    for (let y = 0; y < h; y += 1) {
+      for (let x = 0; x < w; x += 1) {
+        if (alpha[y * w + x] < 0.5) continue;
+        count += 1;
+        if (x < left) left = x;
+        if (x > right) right = x;
+        if (y < top) top = y;
+        if (y > bottom) bottom = y;
+      }
+    }
+    return { left, top, right, bottom, count, area: (right - left + 1) * (bottom - top + 1) };
+  };
+
+  let alpha = alphaOf(backgrounds);
+  let box = outline(alpha);
+  if (!box.count) throw new Error('nothing to draw');
+
+  // 2. The plate.
+  const inked = [];
+  for (let p = 0; p < alpha.length; p += 1) if (alpha[p] >= 0.5) inked.push(p * 4);
+  const plate = commonest(inked);
+  if (box.count / box.area > 0.5 && plate.share > 0.5) {
+    /*
+      Is the commonest colour really a plate, or just bold lettering? A plate
+      SURROUNDS the rest of the logo: from almost any other part of it, look
+      left, right, up and down, and there is plate in every direction. The
+      "Eid" lettering inside its white disc passes that; the red bar and the
+      yellow words beside Mehfil's white letters don't — above or below them
+      there is nothing but background — so those letters are the logo.
+    */
+    const isPlate = new Uint8Array(w * h);
+    const firstX = new Int32Array(h).fill(w);
+    const lastX = new Int32Array(h).fill(-1);
+    const firstY = new Int32Array(w).fill(h);
+    const lastY = new Int32Array(w).fill(-1);
+    for (let p = 0; p < isPlate.length; p += 1) {
+      if (alpha[p] < 0.5 || distance(p * 4, plate.colour) >= 40) continue;
+      isPlate[p] = 1;
+      const x = p % w;
+      const y = (p - x) / w;
+      if (x < firstX[y]) firstX[y] = x;
+      if (x > lastX[y]) lastX[y] = x;
+      if (y < firstY[x]) firstY[x] = y;
+      if (y > lastY[x]) lastY[x] = y;
+    }
+    const inside = (p) => {
+      const x = p % w;
+      const y = (p - x) / w;
+      return firstX[y] < x && x < lastX[y] && firstY[x] < y && y < lastY[x];
+    };
+    let rest = 0;
+    let enclosed = 0;
+    for (let p = 0; p < isPlate.length; p += 1) {
+      if (alpha[p] < 0.5 || isPlate[p]) continue;
+      rest += 1;
+      if (inside(p)) enclosed += 1;
+    }
+
+    if (rest > box.count * 0.04 && enclosed / rest > 0.7) {
+      /*
+        On the plate, only the plate's colour is background. The colour round
+        the edge is NOT removed there — white lettering on a dark badge, in a
+        screenshot with a white margin, is the same white as the margin, and
+        would otherwise vanish with it. Off the plate nothing changes, except
+        a two-pixel rim hugging it, so its soft edge doesn't leave an outline.
+      */
+      const near = isPlate.slice();
+      for (let ring = 0; ring < 2; ring += 1) {
+        const grown = near.slice();
+        for (let p = 0; p < near.length; p += 1) {
+          if (near[p]) continue;
+          const x = p % w;
+          if ((x > 0 && near[p - 1]) || (x < w - 1 && near[p + 1])
+            || (p >= w && near[p - w]) || (p < w * (h - 1) && near[p + w])) grown[p] = 1;
+        }
+        near.set(grown);
+      }
+      const onPlate = alphaOf([plate.colour]);
+      for (let p = 0; p < onPlate.length; p += 1) {
+        if (!inside(p)) onPlate[p] = near[p] ? 0 : alpha[p];
+      }
+      alpha = onPlate;
+      box = outline(alpha);
+    }
+  }
+
+  // 3. Cut to the mark itself, with a hair of room so soft edges aren't clipped.
+  const pad = 2;
+  const x0 = Math.max(0, box.left - pad);
+  const y0 = Math.max(0, box.top - pad);
+  const cw = Math.min(w, box.right + pad + 1) - x0;
+  const ch = Math.min(h, box.bottom + pad + 1) - y0;
+  const out = document.createElement('canvas');
+  out.width = cw;
+  out.height = ch;
+  const octx = out.getContext('2d');
+  const stencil = octx.createImageData(cw, ch);
+  for (let y = 0; y < ch; y += 1) {
+    for (let x = 0; x < cw; x += 1) {
+      stencil.data[(y * cw + x) * 4 + 3] = Math.round(alpha[(y + y0) * w + x + x0] * 255);
+    }
+  }
+  octx.putImageData(stencil, 0, 0);
+  return new Promise((resolve, reject) => out.toBlob((blob) => (blob
+    ? resolve({ url: URL.createObjectURL(blob), ratio: cw / ch })
+    : reject(new Error('no image'))), 'image/png'));
+}
+
 function mountHome() {
   // Delegated: the carousel's loop clones are created after this runs.
   $('main')?.addEventListener('click', (event) => {
@@ -900,6 +1135,8 @@ function mountHome() {
 
   // The home page has two rows now — the client logos and the recent wins.
   $$('[data-carousel]').forEach((node) => mountCarousel(node));
+  // After the carousels, so the loop's copies of each logo are drawn too.
+  $$('.logo-mark[data-logo]').forEach(drawLogoMark);
   mountHeroVideo();
   mountHeroParallax();
 }
@@ -1080,11 +1317,25 @@ async function renderOurWork() {
     : '<span class="result muted">Add your results in edit mode</span>';
 
   /*
-    One client, as a line in a table you can open. Closed it is just their name,
-    their tag if they have one, and how much work is on it. Open it shows their
-    note (only if one has been written) and their reels — each reel takes one
-    tile's worth of width, not the whole line, so a client with a single
-    vertical reel doesn't leave a screen of empty space beside it.
+    One client, as a line in the table. Closed it is their name and their tag,
+    if they have one. Open it shows their note and their reels — each reel
+    takes one tile's worth of width, not the whole line, so a client with a
+    single vertical reel doesn't leave a screen of empty space beside it.
+
+    NO COUNT. The number of videos behind a name is our business, not the
+    reader's: "1 video" beside a client reads as an apology, and sitting in a
+    column next to "4 videos" it invites a comparison that says nothing about
+    the work.
+
+    A CLIENT WITH NOTHING BEHIND THEM IS NOT A BUTTON. It used to be one, and
+    pressing it opened a panel whose entire content was a line saying there
+    was nothing there — which is a door that leads to a sign saying "no door".
+    Now the row is a plain line: the name, the tag, no chevron, nothing to
+    press and nothing written. It still counts as a client, which is the point
+    of it being listed at all.
+
+    Their videos are still added the usual way, through "Manage clients" in
+    edit mode — that never ran through this row.
 
     `scope` keeps the ids unique: the same client appears in both the industry
     view and the full index, and two panels can't share one id.
@@ -1092,15 +1343,31 @@ async function renderOurWork() {
   const clientTableRow = (scope) => (client) => {
     const videos = (client.videos ?? []).filter((video) => video.driveFileId);
     const id = `${scope}-${esc(client.id)}`;
+    const tag = client.notes
+      ? `<span class="tag tag--soft">${esc(client.notes)}</span>`
+      : '';
+
+    /*
+      Is there anything on the other side of the door? Videos, or a note
+      somebody has written. A note with no videos still opens — hiding
+      something that was deliberately typed would be worse than an empty row.
+    */
+    if (!videos.length && !client.tagline) {
+      return `
+      <li class="client-row">
+        <div class="client-row-head client-row-head--static">
+          <span class="client-row-name">${esc(client.name)}</span>
+          ${tag}
+        </div>
+      </li>`;
+    }
+
     return `
     <li class="client-row">
       <button type="button" class="client-row-head" data-toggle="${id}"
               aria-expanded="false" aria-controls="${id}">
         <span class="client-row-name">${esc(client.name)}</span>
-        ${client.notes ? `<span class="tag tag--soft">${esc(client.notes)}</span>` : ''}
-        <span class="client-row-count tiny">${videos.length
-          ? `${videos.length} video${videos.length === 1 ? '' : 's'}`
-          : 'No work added yet'}</span>
+        ${tag}
         ${icon('chevronRight')}
       </button>
       <div class="disclosure-panel" id="${id}" hidden data-animate="true">
@@ -1112,7 +1379,7 @@ async function renderOurWork() {
                   ${mediaTile({ driveFileId: video.driveFileId, title: `${client.name} — ${video.title}` })}
                   ${video.title ? `<figcaption class="tiny">${esc(video.title)}</figcaption>` : ''}
                 </figure>`).join('')}</div>`
-            : `<p class="tiny">No work added for ${esc(client.name)} yet — add their video links in edit mode.</p>`}
+            : ''}
         </div>
       </div>
     </li>`;
@@ -1557,11 +1824,19 @@ async function renderLookInside() {
   const settings = await load('settings');
   const images = new Map((settings.lookInsideImages ?? []).map((entry) => [entry.step, entry]));
 
-  /* An image beside each step: a URL, or a Drive file shown via its thumbnail. */
+  /*
+    An image beside each step: a URL, or a Drive file shown via its thumbnail.
+
+    Images are optional. A step without one is just its words — no grey
+    "coming soon" box, which told visitors something was missing. In edit
+    mode a slim note sits where the image would go, so it's clear the gap is
+    a choice and where to fill it if you want to.
+  */
   const imageFor = (number) => {
     const entry = images.get(number);
-    if (!entry) {
-      return `<div class="process-media media--empty">${icon('image')}<span>Image coming soon</span></div>`;
+    if (!entry?.image) {
+      return editOnly(`<p class="process-media-note tiny">${icon('image')}
+        <span>No image for this step — visitors just see the text. Add one with <strong>Edit step images</strong>.</span></p>`);
     }
     const src = /^(https?:|\/)/.test(entry.image) ? assetUrl(entry.image, 1600) : esc(driveThumb(entry.image, 1600));
     return `<figure class="process-media">
@@ -3661,7 +3936,7 @@ function mountEditHandlers() {
         + 'Leave this empty and the clients who already have a logo on file are used instead.',
       fields: [{
         name: 'clientLogos', label: 'Logos', type: 'rows', addLabel: 'Add a logo',
-        hint: 'A logo on a see-through background (PNG or WebP) sits best on both the light and the dark page.',
+        hint: 'Any logo works — the page removes its background and redraws it in black for light mode and white for dark mode, all at the same size.',
         columns: [
           { key: 'image', label: 'Logo image', placeholder: 'Paste a Cloudinary or other image link' },
           { key: 'name', label: 'Who it belongs to', placeholder: 'Read aloud to anyone using a screen reader' },
@@ -3677,7 +3952,7 @@ function mountEditHandlers() {
 
     'look-images': () => openSettingsEditor({
       title: 'Look Inside images',
-      subtitle: 'One line per image: the step number, then an image URL or a Google Drive link. Drive files must be shared as "Anyone with the link".',
+      subtitle: 'Images are optional — add one only for the steps you want. Press Add an image, give the step number, then paste an image link or a Google Drive link (shared as "Anyone with the link"). A step with no image just shows its text.',
       fields: [{
         name: 'lookInsideImages', label: 'Step images', type: 'rows', addLabel: 'Add an image',
         columns: [

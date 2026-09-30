@@ -122,11 +122,13 @@ touches videos, taglines or flags.
 
 ### Look Inside images
 
-**Edit step images** on the Look Inside page takes one line per image: the step number, then
-an image URL **or a Google Drive link**, then an optional caption — e.g.
-`3 | https://drive.google.com/file/d/…/view | Our first meeting`. Drive links are stored as
-the file id and shown through Drive's thumbnail service, so the file must be shared as
-"Anyone with the link". Steps without an image show a placeholder.
+**Images are optional** — add one only to the steps you want. Press **Edit step images** on
+the Look Inside page, then **Add an image** for each one: type the step number, paste an
+image link **or a Google Drive link**, and add a caption if you like. Drive files must be
+shared as "Anyone with the link".
+
+A step without an image just shows its words — visitors see no empty box. In edit mode a
+slim dashed note sits where the image would go, as a reminder that you can add one there.
 
 ### Images (Cloudinary)
 
@@ -364,10 +366,17 @@ button underneath that goes to the contact page, under a **We've Worked With** l
 paste the image link, and say who it belongs to — that name is not shown on screen; it is
 what a screen reader says in place of the picture.
 
-- A logo on a see-through background (PNG or WebP) sits best, since the page can be light
-  or dark.
-- They are all shown at the same height and the same strength, so the row reads as one line
-  of marks rather than a scrapbook.
+- **Upload the logo however you have it.** Black on white, white on black, colour, a
+  screenshot with a box behind it — it doesn't matter. The page works out which part is the
+  logo and which part is the background, throws the background away, trims off empty
+  margins, and redraws what's left in one colour: near-black in light mode, near-white in
+  dark mode. Switching theme switches the logos with it.
+- Logos sitting on a badge of their own (lettering inside a circle or a box) have the badge
+  taken away too, leaving the lettering. A logo that *is* a solid shape keeps its shape.
+- Every logo is given the same amount of space by **area**, not height — so a long wordmark
+  and a square badge look like equals — and the whole logo always fits. Nothing is cropped.
+- If a logo ever comes out wrong, the cleanest fix is a better source: a PNG with a
+  see-through background, or a screenshot cropped tight to the logo.
 - With more logos than fit across the screen the row travels by itself; with only a few it
   sits still.
 - Leave the list empty and any clients that already have a logo on file are used instead.
