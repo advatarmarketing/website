@@ -103,6 +103,8 @@ function sanitize(settings) {
       .map((entry) => ({
         step: Math.round(Number(entry?.step)),
         image: cleanImageRef(entry?.image),
+        /* Optional: a second version of the picture for the dark page. */
+        imageDark: cleanImageRef(entry?.imageDark),
         caption: clean(entry?.caption, 140),
       }))
       .filter((entry) => entry.step >= 1 && entry.step <= 20 && entry.image),  };

@@ -1838,9 +1838,22 @@ async function renderLookInside() {
       return editOnly(`<p class="process-media-note tiny">${icon('image')}
         <span>No image for this step — visitors just see the text. Add one with <strong>Edit step images</strong>.</span></p>`);
     }
-    const src = /^(https?:|\/)/.test(entry.image) ? assetUrl(entry.image, 1600) : esc(driveThumb(entry.image, 1600));
+    /*
+      Two pictures may be given: one for the light page and one for the dark.
+      Both are put on the page and CSS shows whichever matches the theme, so
+      switching theme swaps them at once with nothing to reload. With only one
+      given, that one is used on both.
+    */
+    const source = (ref) => (/^(https?:|\/)/.test(ref) ? assetUrl(ref, 1600) : esc(driveThumb(ref, 1600)));
+    const alt = esc(entry.caption || '');
+    const picture = (ref, extra) =>
+      `<img class="process-img${extra}" src="${source(ref)}" alt="${alt}"
+            loading="lazy" decoding="async" referrerpolicy="no-referrer">`;
+
     return `<figure class="process-media">
-      <img src="${src}" alt="${esc(entry.caption || '')}" loading="lazy" decoding="async" referrerpolicy="no-referrer">
+      ${entry.imageDark
+        ? `${picture(entry.image, ' process-img--light')}${picture(entry.imageDark, ' process-img--dark')}`
+        : picture(entry.image, '')}
       ${entry.caption ? `<figcaption class="tiny">${esc(entry.caption)}</figcaption>` : ''}
     </figure>`;
   };
@@ -3952,12 +3965,17 @@ function mountEditHandlers() {
 
     'look-images': () => openSettingsEditor({
       title: 'Look Inside images',
-      subtitle: 'Images are optional — add one only for the steps you want. Press Add an image, give the step number, then paste an image link or a Google Drive link (shared as "Anyone with the link"). A step with no image just shows its text.',
+      subtitle: 'Images are optional — add one only for the steps you want. Press Add an image, give the step number, then paste an image link or a Google Drive link (shared as "Anyone with the link"). A step with no image just shows its text. Add a second link for dark mode if the picture needs to differ there.',
       fields: [{
         name: 'lookInsideImages', label: 'Step images', type: 'rows', addLabel: 'Add an image',
         columns: [
           { key: 'step', label: 'Step', type: 'number', narrow: true },
           { key: 'image', label: 'Image link', placeholder: 'Cloudinary, Google Drive, or any image link' },
+          {
+            key: 'imageDark',
+            label: 'Image link — dark mode (optional)',
+            placeholder: 'Leave empty to use the same picture on both',
+          },
           { key: 'caption', label: 'Caption (optional)' },
         ],
       }],

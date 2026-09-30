@@ -130,6 +130,12 @@ shared as "Anyone with the link".
 A step without an image just shows its words — visitors see no empty box. In edit mode a
 slim dashed note sits where the image would go, as a reminder that you can add one there.
 
+**A different picture for dark mode** is optional too. The second box, **Image link — dark
+mode**, takes another link; leave it empty and the same picture is used whichever theme the
+visitor is on. When both are given, the page holds both and swaps them the instant someone
+switches between light and dark — nothing reloads. This is for pictures that only work on
+one background, like a screenshot of a white page.
+
 ### Images (Cloudinary)
 
 Every image field on the site takes a plain URL, so a Cloudinary delivery URL copied
