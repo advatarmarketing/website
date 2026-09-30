@@ -1960,6 +1960,7 @@ video.hero-hand { height: auto; object-fit: contain; }
 
 .process-media { margin: 1.75rem 0 0; }
 .process-media img,
+.process-media video,
 .process-media.media--empty {
   display: block;
   width: 100%;
@@ -1969,11 +1970,13 @@ video.hero-hand { height: auto; object-fit: contain; }
   border: 1px solid var(--glass-border);
   box-shadow: var(--shadow-card);
 }
-.process-media img {
+.process-media img,
+.process-media video {
   transform: scale(1.04);
   transition: transform 900ms var(--ease-out) 150ms;
 }
-.process-step[data-shown='true'] .process-media img { transform: none; }
+.process-step[data-shown='true'] .process-media img,
+.process-step[data-shown='true'] .process-media video { transform: none; }
 .process-media figcaption { margin-top: 0.6rem; }
 
 /*

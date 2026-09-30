@@ -1846,9 +1846,34 @@ async function renderLookInside() {
     */
     const source = (ref) => (/^(https?:|\/)/.test(ref) ? assetUrl(ref, 1600) : esc(driveThumb(ref, 1600)));
     const alt = esc(entry.caption || '');
-    const picture = (ref, extra) =>
-      `<img class="process-img${extra}" src="${source(ref)}" alt="${alt}"
-            loading="lazy" decoding="async" referrerpolicy="no-referrer">`;
+
+    /*
+      A step can be given a short film instead of a photograph — an MP4 on
+      Cloudinary, used the way an animated GIF would be. It has no sound and no
+      controls: it simply runs, and starts again. A GIF of any length is enormous
+      and looks coarse; the same thing as an MP4 is a fraction of the size and
+      keeps its quality, which is why the link is a video rather than a GIF.
+
+      SILENT, AND SILENT EVEN IF THE FILE ISN'T. `muted` is what lets it start
+      on its own at all — no browser plays sound nobody asked for — so a clip
+      that happens to carry an audio track is still silent here.
+
+      It waits its turn: nothing is fetched beyond the first frame until the
+      step is on screen (see mountLookInside), so ten of these don't all load
+      and decode at once on a phone.
+    */
+    const clip = (ref, extra) => {
+      const src = isCloudinaryVideo(ref) ? cloudinaryVideo(ref, 'c_limit,w_1600') : ref;
+      const poster = isCloudinaryVideo(ref) ? ` poster="${esc(cloudinaryPoster(ref, 1600))}"` : '';
+      return `<video class="process-img${extra}" data-clip="${esc(src)}"${poster}
+                     muted loop playsinline preload="none"
+                     ${alt ? `aria-label="${alt}"` : 'aria-hidden="true"'}></video>`;
+    };
+
+    const picture = (ref, extra) => (looksLikeVideo(ref)
+      ? clip(ref, extra)
+      : `<img class="process-img${extra}" src="${source(ref)}" alt="${alt}"
+              loading="lazy" decoding="async" referrerpolicy="no-referrer">`);
 
     return `<figure class="process-media">
       ${entry.imageDark
@@ -1911,10 +1936,53 @@ async function renderLookInside() {
   </main>`;
 }
 
+/*
+  The looping clips on Look Inside, if any step was given one.
+
+  Each waits until its step is on screen before it fetches anything: until then
+  the browser has only the poster, which is a single frame. That matters on a
+  page of ten steps — ten films loading at once is a slow page and a warm phone,
+  and nine of them are nowhere near the screen.
+
+  Off screen they pause. Somebody scrolling past shouldn't leave a row of films
+  running behind them, and a paused film costs nothing.
+
+  Where motion is turned off in the system settings, nothing plays at all: the
+  poster stays, which is the still picture of the same thing.
+*/
+function mountStepClips() {
+  const clips = $$('video[data-clip]');
+  if (!clips.length) return;
+
+  if (prefersReducedMotion() || !('IntersectionObserver' in window)) {
+    // No observer to lean on: load them, but still never play on their own.
+    if (!prefersReducedMotion()) clips.forEach((clip) => { clip.src = clip.dataset.clip; });
+    return;
+  }
+
+  const watcher = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      const clip = entry.target;
+      if (!entry.isIntersecting) { clip.pause(); continue; }
+      if (!clip.src) {
+        clip.src = clip.dataset.clip;
+        clip.preload = 'auto';
+      }
+      // A play() that can't start (a tab in the background) isn't a problem.
+      clip.play().catch(() => {});
+    }
+  }, { rootMargin: '25% 0px' });
+
+  clips.forEach((clip) => watcher.observe(clip));
+  registerCleanup(() => watcher.disconnect());
+}
+
 function mountLookInside() {
   const process = $('.process');
   const steps = $$('.process-step');
   if (!process || !steps.length) return;
+
+  mountStepClips();
 
   // A step's name and its text arrive together: the option on the left reveals
   // as the text on the right does.
@@ -3965,16 +4033,16 @@ function mountEditHandlers() {
 
     'look-images': () => openSettingsEditor({
       title: 'Look Inside images',
-      subtitle: 'Images are optional — add one only for the steps you want. Press Add an image, give the step number, then paste an image link or a Google Drive link (shared as "Anyone with the link"). A step with no image just shows its text. Add a second link for dark mode if the picture needs to differ there.',
+      subtitle: 'Optional — add one only for the steps you want. Press Add an image, give the step number, then paste the link. It can be a picture, a Google Drive file (shared as "Anyone with the link"), or a Cloudinary MP4, which plays silently on a loop like a GIF. A step with no link just shows its text, and the second box takes a different version for dark mode.',
       fields: [{
         name: 'lookInsideImages', label: 'Step images', type: 'rows', addLabel: 'Add an image',
         columns: [
           { key: 'step', label: 'Step', type: 'number', narrow: true },
-          { key: 'image', label: 'Image link', placeholder: 'Cloudinary, Google Drive, or any image link' },
+          { key: 'image', label: 'Image or video link', placeholder: 'A picture, a Google Drive file, or a Cloudinary MP4' },
           {
             key: 'imageDark',
-            label: 'Image link — dark mode (optional)',
-            placeholder: 'Leave empty to use the same picture on both',
+            label: 'Dark mode version (optional)',
+            placeholder: 'Leave empty to use the same one on both',
           },
           { key: 'caption', label: 'Caption (optional)' },
         ],

@@ -122,19 +122,34 @@ touches videos, taglines or flags.
 
 ### Look Inside images
 
-**Images are optional** — add one only to the steps you want. Press **Edit step images** on
-the Look Inside page, then **Add an image** for each one: type the step number, paste an
-image link **or a Google Drive link**, and add a caption if you like. Drive files must be
-shared as "Anyone with the link".
+**Pictures are optional** — add one only to the steps you want. Press **Edit step images**
+on the Look Inside page, then **Add an image** for each one: type the step number, paste the
+link, and add a caption if you like.
 
-A step without an image just shows its words — visitors see no empty box. In edit mode a
-slim dashed note sits where the image would go, as a reminder that you can add one there.
+A step without a link just shows its words — visitors see no empty box. In edit mode a slim
+dashed note sits where the picture would go, as a reminder that you can add one there.
 
-**A different picture for dark mode** is optional too. The second box, **Image link — dark
-mode**, takes another link; leave it empty and the same picture is used whichever theme the
+**Three kinds of link work in the box:**
+
+- A **picture** — any image link, including a Cloudinary one.
+- A **Google Drive file**, which must be shared as "Anyone with the link".
+- A **Cloudinary MP4**, which plays like a GIF: silent, on a loop, no play button and no
+  controls. Upload the clip to Cloudinary as you would a video and paste its link. It is
+  silent even if the file has sound on it, because a browser will not start sound nobody
+  asked for. Use an MP4 rather than an actual GIF — a GIF of the same few seconds is many
+  times the size and looks much coarser.
+
+Clips wait their turn: a step's clip is not fetched until you have nearly scrolled to it,
+and it pauses again once it is off screen, so a page of ten does not load ten films at once
+on a phone. Where someone has turned off animations in their system settings, the clip does
+not play at all — they see its first frame as a still picture.
+
+**A different version for dark mode** is optional too. The second box, **Dark mode
+version**, takes another link; leave it empty and the same one is used whichever theme the
 visitor is on. When both are given, the page holds both and swaps them the instant someone
 switches between light and dark — nothing reloads. This is for pictures that only work on
-one background, like a screenshot of a white page.
+one background, like a screenshot of a white page. The two can be different kinds: a picture
+in light mode and a clip in dark mode is fine.
 
 ### Images (Cloudinary)
 
