@@ -558,6 +558,18 @@ width — a client with one reel gets one tile, not a reel stretched across the 
 **View all client work** — the same grid, but every industry at once. Opening one of
 these two closes the other, so what you pressed always appears directly underneath it.
 
+### A client in more than one industry
+
+**Industry** is where a client mainly belongs. **Also in**, just under it, takes as many more
+as you like — press **Add an industry** and pick one from the list.
+
+They then show under every industry they are in, so a gym that is also a personal brand is
+found under both. **View all client work** still lists everybody exactly once, under their
+main Industry, and the client count is unchanged.
+
+The list offers every industry already in use plus the standard ones, so you can file
+someone under an industry before anyone else is in it.
+
 ### Arranging Our Work
 
 Four buttons appear under the two above when you are in edit mode.
@@ -599,6 +611,14 @@ size, with the whole category behind it — the arrows either side, or the left 
 on a keyboard, walk through them, and Escape or the cross closes it.
 
 Add and arrange them under **Manage photography** in edit mode.
+
+### Branding
+
+Branding work is shown at whatever shape it was made in — a square logo, a wide poster, a
+tall menu — so nothing is cropped. Press any piece to see it full size; the arrows, or the
+left and right keys, walk through the rest of the branding wall.
+
+Add and arrange them under **Manage branding** in edit mode.
 
 ## Login
 

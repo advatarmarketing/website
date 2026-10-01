@@ -25,6 +25,17 @@ export default collectionRoute({
       id: slugify(client.id || name, 'client'),
       name,
       category: clean(client.category, 80) || 'Uncategorised',
+      /*
+        More industries the same client belongs to. Plenty of them sit in two
+        at once — a gym that is also a personal brand — and they show under
+        each one rather than having to be picked. Stored as plain names; the
+        editor hands them over as rows, so both shapes are accepted here.
+      */
+      extraCategories: [...new Set((Array.isArray(client.extraCategories) ? client.extraCategories : [])
+        .slice(0, 8)
+        .map((entry) => clean(typeof entry === 'string' ? entry : entry?.name, 80))
+        .filter(Boolean))]
+        .filter((name) => name.toLowerCase() !== (clean(client.category, 80) || 'Uncategorised').toLowerCase()),
       logoUrl: cleanUrl(client.logoUrl),
       tagline: clean(client.tagline, 200),
       // The reel that represents this client on Our Work: one of their videos or

@@ -1259,17 +1259,41 @@ const CATEGORY_ORDER = [
  * has been set there; otherwise CATEGORY_ORDER above is used. Anything not
  * named in either list falls to the end, alphabetically. Within an industry,
  * clients follow their own Order number.
+ *
+ * A client appears under every industry they belong to. `primaryOnly` files
+ * each one under their Industry alone, which is what a list meant to name
+ * everybody exactly once needs — the full client index, and the editor where
+ * the Order numbers are set (one number per client, so one row per client).
  */
-function industriesOf(clients) {
+/** A name reduced to something safe to put in an id: "Food & Beverage" -> "food-beverage". */
+const slug = (name) => String(name ?? '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '') || 'x';
+
+/** The extra industries on a client, however the editor last stored them. */
+const industriesFor = (client) => (client?.extraCategories ?? [])
+  .map((entry) => (typeof entry === 'string' ? entry : entry?.name))
+  .map((name) => String(name ?? '').trim())
+  .filter(Boolean);
+
+function industriesOf(clients, { primaryOnly = false } = {}) {
   const chosen = (state.settings?.industryOrder ?? []).filter(Boolean);
   const sequence = chosen.length ? chosen : CATEGORY_ORDER;
   const rank = (name) => {
     const index = sequence.findIndex((entry) => entry.toLowerCase() === name.toLowerCase());
     return index === -1 ? sequence.length : index;
   };
+  /*
+    A client goes under its Industry and under anything in its "Also in" list,
+    so one that genuinely sits in two places — a gym that is also a personal
+    brand — is found in both rather than filed under whichever was typed first.
+    They are still one client: the full index below lists everybody once.
+  */
   const grouped = clients.reduce((map, client) => {
-    const key = client.category || 'Uncategorised';
-    map.set(key, [...(map.get(key) ?? []), client]);
+    const keys = [client.category || 'Uncategorised']
+      .concat(primaryOnly ? [] : industriesFor(client));
+    for (const key of new Set(keys)) map.set(key, [...(map.get(key) ?? []), client]);
     return map;
   }, new Map());
   // Personal Brands & Creators always has its place, even before any are added.
@@ -1324,6 +1348,7 @@ async function renderOurWork() {
   const featured = clients.filter((client) => client.featured).slice(0, 12);
   const stats = settings.resultsStats ?? [];
   const industries = industriesOf(clients);
+  const indexGroups = industriesOf(clients, { primaryOnly: true });
 
   const resultsRow = stats.length
     ? stats.map((stat) =>
@@ -1428,7 +1453,12 @@ async function renderOurWork() {
                </div>
              </div>`
           : ''}
-        ${clientTable(group, 'ind', `No clients in ${esc(name)} yet — add them in edit mode.`)}
+        ${/*
+            The scope carries the industry, not just "ind": a client listed in
+            two industries would otherwise give two panels the same id, and
+            opening one of them would work the other.
+          */''}
+        ${clientTable(group, `ind-${slug(name)}`, `No clients in ${esc(name)} yet — add them in edit mode.`)}
       </div>
     </div>`;
   };
@@ -1459,7 +1489,7 @@ async function renderOurWork() {
         <span class="disclosure-meta">${icon('chevronRight')}</span>
       </button>
       <div class="disclosure-panel" id="photo-${esc(category.id)}" hidden data-animate="true">
-        <div class="photo-layout">
+        <div class="photo-layout" data-photo-set>
           ${photoTile(category.coverPhotoUrl, `${category.name} — cover`)
             || mediaTile({ imageUrl: '', title: '', ratio: 'square', empty: 'Cover photo coming soon' })}
           ${category.photos?.length
@@ -1568,7 +1598,7 @@ async function renderOurWork() {
               ${editOnly(`<button type="button" class="edit-chip" data-edit="client-count">${icon('pencil')} Edit this line</button>`)}
             </div>
 
-            ${industries.map(([name, group]) => `
+            ${indexGroups.map(([name, group]) => `
               <div class="client-index" data-reveal>
                 <h4 class="client-index-head"><span>${esc(name)}</span></h4>
                 ${clientTable(group, 'idx', `No clients in ${esc(name)} yet — add them in edit mode.`)}
@@ -1624,9 +1654,18 @@ async function renderOurWork() {
         ${eyebrow('Branding', 'diamond')}
         <h2 class="display display--lg" data-reveal data-copy="work.branding.title" style="margin-bottom:calc(2.5rem - 0.16em)">Elevating your brand.</h2>
         ${branding.length
-          ? `<div class="branding-masonry">${branding.map((item, index) => `
+          ? /*
+              Branding work arrives as whatever shape it was made in — a square
+              logo, a wide poster, a tall menu. The tiles used to be squares
+              with the picture cropped to fill them, which cut the ends off
+              anything that wasn't square. They now take each picture's own
+              shape, so every piece is shown whole, and the masonry column
+              layout absorbs the different heights.
+            */
+            `<div class="branding-masonry" data-photo-set>${branding.map((item, index) => `
               <figure data-reveal style="--i:${index}">
-                ${mediaTile({ imageUrl: item.mediaUrl, title: item.clientName || item.type, ratio: 'square' })}
+                ${photoTile(item.mediaUrl, item.clientName || item.type, 'natural')
+                  || mediaTile({ imageUrl: '', title: '', ratio: 'square' })}
                 ${item.clientName ? `<figcaption class="tiny" style="margin-top:0.4rem">${esc(item.clientName)}</figcaption>` : ''}
               </figure>`).join('')}</div>`
           : emptyState('No branding work yet', 'Add logos, carousels and branded edits in edit mode.')}
@@ -1653,13 +1692,17 @@ function mountOurWork() {
     const pressed = event.target.closest('[data-photo]');
     if (!pressed) return;
     /*
-      Everything in the same category, in the order shown — and the copies the
-      carousel made for its loop dropped, or the same picture would come round
-      again halfway through. The clicked one is found by its address rather
-      than by counting, since a copy is not the element that was pressed.
+      Everything in the same set, in the order shown — one photography category,
+      or the branding wall. Scoped to the set rather than to the page, so
+      opening a photograph doesn't hand you every other picture on Our Work.
+
+      The copies the carousel made for its loop are dropped, or the same
+      picture would come round again halfway through. The clicked one is found
+      by its address rather than by counting, since a copy is not the element
+      that was pressed.
     */
-    const panel = pressed.closest('.disclosure-panel') ?? pressed.closest('main');
-    const photos = $$('[data-photo]', panel)
+    const group = pressed.closest('[data-photo-set]') ?? pressed.closest('main');
+    const photos = $$('[data-photo]', group)
       .filter((node) => !node.closest('[data-clone="true"]'))
       .map((node) => node.dataset.photo);
     const unique = [...new Set(photos)];
@@ -3627,13 +3670,23 @@ async function openClientSync() {
 /** One card in a `rows` field. Also used when the Add button makes a new one. */
 function rowHtml(field, row = {}) {
   const cell = (column) => {
-    const value = row?.[column.key] ?? '';
+    /*
+      A saved row is normally an object keyed by column. A one-column list is
+      allowed to be stored as plain text instead — "Also in" keeps a readable
+      list of names rather than a list of objects wrapping one name each.
+    */
+    const value = (typeof row === 'string'
+      ? (field.columns.length === 1 ? row : '')
+      : row?.[column.key]) ?? '';
     if (column.options) {
+      // Read now, not when the field was declared: a list of industries has to
+      // reflect what exists at the moment the editor is opened.
+      const choices = typeof column.options === 'function' ? column.options() : column.options;
       // An option that isn't in the list any more still has to be shown, or
       // saving an untouched row would quietly change it.
-      const options = column.options.includes(String(value)) || !value
-        ? column.options
-        : [...column.options, String(value)];
+      const options = choices.includes(String(value)) || !value
+        ? choices
+        : [...choices, String(value)];
       return `<span class="field--select rows-select">
                 <select data-key="${esc(column.key)}">
                   ${options.map((option) =>
@@ -3723,7 +3776,16 @@ function fieldValue(form, field) {
     return $$('.rows-row', host)
       .map((row) => Object.fromEntries(field.columns.map((column) =>
         [column.key, $(`[data-key="${CSS.escape(column.key)}"]`, row)?.value.trim() ?? ''])))
-      .filter((row) => field.columns.some((column) => !column.options && row[column.key]));
+      /*
+        A row the user added and left empty is dropped. "Empty" is judged on the
+        columns they have to type into, because a dropdown always holds
+        something — so for a list that is nothing but dropdowns, every row
+        counts, which is how "Also in" keeps its entries.
+      */
+      .filter((row) => {
+        const typed = field.columns.filter((column) => !column.options);
+        return (typed.length ? typed : field.columns).some((column) => row[column.key]);
+      });
   }
 
   const input = form.elements[field.name];
@@ -3961,6 +4023,14 @@ const BACKGROUND_HINT = 'Cloudinary videos and images are both re-encoded and si
 const CLIENT_FIELDS = [
   { name: 'name', label: 'Client name', type: 'text' },
   { name: 'category', label: 'Industry', type: 'text', hint: 'Groups the client on Our Work — e.g. "Personal Brands & Creators".' },
+  {
+    name: 'extraCategories', label: 'Also in', type: 'rows', addLabel: 'Add an industry',
+    hint: 'Other industries this client belongs to. They show under every one, and are still '
+      + 'listed once in View all client work.',
+    // A list, not a fixed one: it is read when the editor opens, so an industry
+    // added to another client today is offered here today.
+    columns: [{ key: 'name', label: 'Industry', options: industryOptions }],
+  },
   { name: 'tagline', label: 'Tagline', type: 'text' },
   { name: 'websiteUrl', label: 'Website URL', type: 'text' },
   { name: 'logoUrl', label: 'Logo URL', type: 'text', hint: IMAGE_HINT },
@@ -4223,12 +4293,17 @@ function mountEditHandlers() {
 function industryOptions() {
   const known = industriesOf(state.clients ?? []).map(([name]) => name);
   const used = (state.settings?.industryReels ?? []).map((row) => row.industry).filter(Boolean);
-  return [...new Set([...known, ...used])];
+  // CATEGORY_ORDER too, so the standard industries can be picked before anyone
+  // is in them — which is the whole point of an "Also in" list.
+  return [...new Set([...known, ...used, ...CATEGORY_ORDER])].filter(Boolean);
 }
 
 function openClientOrderEditor() {
   const clients = state.clients ?? [];
-  const groups = industriesOf(clients);
+  // One row each: Order is a single number per client, so a client listed
+  // under two industries would otherwise be asked for twice and only the
+  // second answer would be kept.
+  const groups = industriesOf(clients, { primaryOnly: true });
 
   openModal({
     title: 'Order, notes & tags',
