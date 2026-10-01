@@ -790,7 +790,7 @@ async function renderHome() {
         <p class="clients-label micro" data-reveal data-copy="home.clients.label">We've Worked With</p>
         ${logos.length
           ? `<div class="carousel logo-strip" data-carousel data-reveal>
-               <div class="carousel-track" data-autoscroll="true" data-drift="right">
+               <div class="carousel-track" data-autoscroll="true" data-drift="right" data-speed="34">
                  ${logos.map((logo) => `
                    <div class="logo-cell">
                      <span class="logo-mark" role="img" aria-label="${esc(logo.name || 'Client logo')}"
@@ -3026,7 +3026,13 @@ function mountCarousel(root) {
     // A row heading right starts one full set in, so there is something to its
     // left to come into view rather than an immediate jump back.
     if (track.dataset.drift === 'right') track.scrollLeft = loopWidth();
-    const SPEED = 14;                 // px per second — a slow walk, not a slide
+    /*
+      Pixels a second. 14 is a slow walk, which suits a row of films you are
+      meant to look at one at a time. A row can ask for its own pace with
+      data-speed — the logos travel faster, because a logo is taken in at a
+      glance and a long row of them crawling looks stalled.
+    */
+    const SPEED = Number(track.dataset.speed) || 14;
     /*
       Which way the row travels. Normally the cards march leftward, as a reel of
       work reads. data-drift="right" sends them the other way, for the logo row

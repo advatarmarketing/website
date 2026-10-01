@@ -1374,10 +1374,27 @@ video.hero-hand { height: auto; object-fit: contain; }
     exactly as much as it moves the hand on a computer.
   */
   .hero--media .hero-hand {
-    --hand-w: 220%;
+    /*
+      In vw, not %, so the sum for `top` below can use it: the hero is the full
+      width of the window, so 130vw and 130% are the same plate.
+    */
+    --hand-w: 130vw;
     width: var(--hand-w);
+
+    /*
+      Across: the phone sits 35% of the way over the plate, so 65% of the plate
+      is to its right — pinning the plate 0.65 of its own width right of the
+      middle puts the phone on the film's centre seam.
+
+      Down: the phone's middle is 60% down the plate, and the plate is drawn
+      half its own height above `top` (the parallax holds it at -50%). So the
+      phone lands 0.10 of a plate-height below `top`, and a plate is its own
+      width ÷ 1.78 tall — 0.0568 of its width. Taking that off a fixed 74.75%
+      of the screen keeps the phone on the same spot however big the plate is,
+      which is what lets the size be changed on its own.
+    */
     right: calc(50% - 0.65 * var(--hand-w));
-    top: 69%;
+    top: calc(74.75% - 0.0568 * var(--hand-w));
   }
   .hero--media::after,
   :root[data-theme='light'] .hero--media::after {
