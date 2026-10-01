@@ -828,6 +828,34 @@ a.glass-card:hover,
 .nav-menu-login-btn { width: 100%; }
 
 /* The menu panel is reachable at every width (R3), not only on mobile. */
+/*
+  The contact button in the top bar, phones only (see navFragment in app.js).
+
+  It catches the light slowly — the same drift as the Join them button on the
+  home page, at a lower strength and over a much longer cycle. It should read
+  as the one warm thing in the bar, not as something flashing for attention.
+*/
+.nav-contact { display: none; }
+@media (max-width: 768px) {
+  .nav-contact {
+    display: inline-flex;
+    color: var(--gold-text);
+    border-color: color-mix(in srgb, var(--gold-text) 32%, transparent);
+    background-image: linear-gradient(100deg,
+      transparent 0%,
+      transparent 38%,
+      color-mix(in srgb, var(--gold-text) 20%, transparent) 50%,
+      transparent 62%,
+      transparent 100%);
+    background-size: 300% 100%;
+    animation: sheen-drift 9s linear infinite;
+  }
+}
+/* Someone who has asked for less movement gets the warmth without the drift. */
+@media (prefers-reduced-motion: reduce) {
+  .nav-contact { animation: none; }
+}
+
 .nav-toggle { display: inline-flex; }
 
 /* Nav menu overlay lives in the 'Nav menu (R3)' section below. */
@@ -1217,9 +1245,21 @@ video.hero-hand { height: auto; object-fit: contain; }
   .hero--media .hero-content { flex: 0 0 auto; justify-content: flex-start; }
   .hero--media .hero-foot { margin-top: auto; }
 
-  /* The film sits directly under the button, not at the very bottom. */
+  /*
+    The first of the two lines at the foot is dropped on a phone. Two blocks of
+    small print under a film on a narrow screen is more reading than the first
+    screen should ask for, and the second line is the one that says what we are.
+    It stays in the page on a computer, and stays editable there.
+  */
+  .hero-foot > p:first-child { display: none; }
+
+  /*
+    The film sits lower than it did, with open screen between it and the button.
+    The words, the button and then a clear gap give the film somewhere to begin,
+    rather than it starting the moment the button ends.
+  */
   .hero--media .hero-media {
-    inset: 42% 0 auto 0;
+    inset: 52% 0 auto 0;
     translate: none;
     width: 100%;
     -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
@@ -1229,19 +1269,24 @@ video.hero-hand { height: auto; object-fit: contain; }
   }
 
   /*
-    The hand, bigger and lower, so it reaches up into the film rather than
-    hiding off the bottom corner of the screen.
-  */
-  /*
-    The hand reaches up into the film from below: sized and placed so the hand
-    itself lands just under the film's lower edge and off to the right, rather
-    than the plate running off the corner of the screen with only the phone
-    showing. Its strength is left alone here, so the Golden overlay setting
-    moves it by exactly as much as it moves the hand on a computer.
+    THE PHONE LANDS ON THE MIDDLE OF THE FILM, as it does on a computer.
+
+    The film runs the full width here, so the seam between its two halves is at
+    the middle of the screen. The phone sits 35% of the way across the hand
+    plate, so 65% of the plate is to its right: pinning the plate 0.65 of its
+    own width to the right of the middle puts the phone exactly on that seam.
+    Written as a sum rather than a number, so it holds on any phone.
+
+    It was pinned to the right-hand edge instead, which left the phone about
+    15% across — hard against the left of the screen, nowhere near the seam.
+
+    Its strength is left alone here, so the Golden overlay setting moves it by
+    exactly as much as it moves the hand on a computer.
   */
   .hero--media .hero-hand {
-    width: 220%;
-    right: -58%;
+    --hand-w: 220%;
+    width: var(--hand-w);
+    right: calc(50% - 0.65 * var(--hand-w));
     top: 69%;
   }
   .hero--media::after,
@@ -1255,19 +1300,31 @@ video.hero-hand { height: auto; object-fit: contain; }
       color-mix(in srgb, var(--bg) 45%, transparent) 88%,
       var(--bg) 100%);
   }
+  /*
+    The amber wash is held further back on a phone than on a computer — a third
+    of the setting rather than a half.
+
+    On a wide screen the wash falls mostly on empty background beside the film.
+    Here the film fills the width, so the same wash lands squarely on the
+    footage and takes the colour out of it: the point of a background film is
+    that you can see the work in it. The shaft of light is narrowed and the two
+    pools under it pulled down and softened, so they sit below the picture
+    rather than across it.
+  */
   .hero--media .hero-light,
   :root[data-theme='light'] .hero--media .hero-light {
+    opacity: calc(0.32 * var(--overlay-k));
     background:
       linear-gradient(90deg,
-        transparent 58%,
-        rgba(255, 178, 74, 0.18) 64%,
-        rgba(255, 214, 150, 0.6) 69%,
-        rgba(255, 240, 214, 0.92) 71%,
-        rgba(255, 214, 150, 0.6) 73%,
-        rgba(255, 178, 74, 0.20) 80%,
-        transparent 92%),
-      radial-gradient(60% 46% at 72% 76%, rgba(255, 150, 40, 0.52), transparent 74%),
-      radial-gradient(90% 56% at 62% 92%, rgba(214, 112, 28, 0.58), transparent 76%);
+        transparent 62%,
+        rgba(255, 178, 74, 0.14) 67%,
+        rgba(255, 214, 150, 0.46) 70%,
+        rgba(255, 240, 214, 0.78) 71.5%,
+        rgba(255, 214, 150, 0.46) 73%,
+        rgba(255, 178, 74, 0.14) 78%,
+        transparent 88%),
+      radial-gradient(56% 38% at 72% 86%, rgba(255, 150, 40, 0.40), transparent 76%),
+      radial-gradient(86% 46% at 62% 98%, rgba(214, 112, 28, 0.44), transparent 78%);
   }
 }
 
@@ -1684,6 +1741,41 @@ video.hero-hand { height: auto; object-fit: contain; }
 .ihsan-body { position: relative; display: grid; gap: 0.75rem; }
 
 /* =========================================================== Contact ===== */
+
+/*
+  The two ways to look round, under the contact heading. Smaller and lighter
+  than the heading, set apart by its wider letter-spacing — an aside, not a
+  second headline.
+
+  The links are underlined rather than coloured. An underline is the one mark
+  everybody already reads as "this goes somewhere", so it carries the whole
+  job without needing a border, a background or a box; the line sits a little
+  low and thin, and warms to gold on hover so there is no doubt.
+*/
+.contact-ways {
+  margin: 1.25rem 0 0;
+  /*
+    No width cap: the whole sentence is meant to sit on one line, and a cap in
+    characters would fold it in two on a wide screen even with room to spare.
+    On a narrow screen it wraps on its own, which is the only place it should.
+  */
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  letter-spacing: 0.01em;
+  color: var(--text-lo);
+}
+.contact-ways a {
+  color: var(--text-hi);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--gold-text) 55%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.28em;
+  transition: color var(--mid) var(--ease), text-decoration-color var(--mid) var(--ease);
+}
+.contact-ways a:hover {
+  color: var(--gold-text);
+  text-decoration-color: var(--gold-text);
+}
 
 .contact-grid {
   display: grid;

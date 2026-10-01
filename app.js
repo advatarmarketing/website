@@ -95,6 +95,7 @@ const ICONS = {
   image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5-5-9 8"/>',
   film: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16M16 4v16M3 12h18"/>',
   mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 7l8.5 6 8.5-6"/>',
+  message: '<path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.3 9.3 0 0 1-3.3-.6L3 21l1.8-5a8 8 0 0 1-.8-3.5 8.4 8.4 0 0 1 9-8.4 8.4 8.4 0 0 1 8 7.4z"/>',
   whatsapp: '<path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z"/><path d="M9 9.5c.4 2.5 3 5.1 5.5 5.5l1-1.4 2 .9v1.8c-3.7.6-8.3-3.9-7.7-7.7h1.8l.9 2z"/>',
   external: '<path d="M14 5h5v5M19 5l-8 8"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/>',
   pin: '<path d="M12 21s7-6 7-11a7 7 0 1 0-14 0c0 5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>',
@@ -301,7 +302,7 @@ const ENQUIRE_URL = 'https://app.advatar.co.uk/enquire';
 
 const loginLink = (className = 'btn btn--sm btn--login nav-login') => `
   <a class="${className}" href="${LOGIN_URL}">
-    ${icon('lock')}<span data-copy="nav.login">Login</span>
+    ${icon('lock')}<span data-copy="nav.login">Client login</span>
   </a>`;
 
 /** The nav menu also lists Home, which the top bar covers with the logo. */
@@ -425,6 +426,14 @@ function navFragment(path) {
       <div class="nav-actions">
         ${themeToggleButton()}
         ${loginLink()}
+
+        <!--
+          A way to reach us from the top bar on a phone, where the Contact link
+          is inside the menu rather than on screen. On a computer the menu's
+          links are already across the bar, so it would only be a repeat: CSS
+          shows it under 768px and nowhere else.
+        -->
+        <a class="icon-btn nav-contact" href="/contact" aria-label="Contact us">${icon('message')}</a>
 
         <button type="button" class="icon-btn nav-toggle" data-nav-toggle
                 aria-label="Open menu" aria-expanded="false">${icon('menu')}</button>
@@ -1732,6 +1741,17 @@ async function renderContact() {
         <div class="glow" style="--glow-w:36rem;--glow-h:26rem;--glow-a:0.26;left:-8rem;top:-4rem"></div>
         ${eyebrow('Contact', 'mail')}
         <h1 class="display display--lg" data-reveal data-copy="contact.title" style="max-width:18ch">Let's talk about what you're building.</h1>
+
+        <!--
+          Two ways to look round before getting in touch, written as a sentence
+          rather than as buttons: this is an aside under the heading, and a row
+          of buttons here would compete with the two real ones below it.
+        -->
+        <p class="contact-ways" data-reveal style="--i:1">
+          <a href="/look-inside" data-copy="contact.ways.look">Have a peek at what it looks like to work with us</a><!--
+          --><span data-copy="contact.ways.or"> or </span><!--
+          --><a href="/our-work" data-copy="contact.ways.work">view what we've been producing over the years</a>
+        </p>
       </div>
     </section>
 
