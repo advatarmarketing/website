@@ -1532,11 +1532,11 @@ async function renderOurWork() {
 
         <!-- Both ways into the client work, side by side. -->
         <div class="work-actions" data-reveal>
-          <button type="button" class="btn btn--ghost" data-toggle="industries" data-exclusive="work"
+          <button type="button" class="btn btn--ember" data-toggle="industries" data-exclusive="work"
                   aria-expanded="false" aria-controls="industries">
             ${icon('film')}<span data-copy="work.video.by-industry">See more by industry</span>
           </button>
-          <button type="button" class="btn btn--ghost" data-toggle="all-clients" data-exclusive="work"
+          <button type="button" class="btn btn--ember" data-toggle="all-clients" data-exclusive="work"
                   aria-expanded="false" aria-controls="all-clients">
             ${icon('layers')}<span data-copy="work.video.all-clients">View all client work</span>
           </button>

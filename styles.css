@@ -585,6 +585,83 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .btn--sheen .icon { color: var(--gold-text); animation: none; }
 
+/*
+  The two ways into the client work, on Our Work.
+
+  They were a pair of plain outlines and read as switched-off next to the gold
+  button above them, so they now carry a gradient that travels slowly through
+  them: a bright ring around the edge and a faint wash of the same inside.
+
+  BOTH COLOURS ARE ALREADY ON THE PAGE — the bright amber and the deeper bronze
+  the whole site is built from. What moves is the light between them, so the
+  buttons catch the eye without introducing a colour that belongs to some other
+  website.
+
+  The gradient carries three full bronze-to-amber cycles across a tile three
+  times the button's width, and the drift moves it by exactly two of them. A
+  gradient that didn't divide evenly like that would snap back to the start on
+  every loop.
+*/
+.btn--ember {
+  --ember-1: var(--gold-2);                   /* the deeper bronze */
+  --ember-2: var(--gold-1);                   /* the bright amber */
+  --ember-ring: 85%;                          /* how strong the edge is */
+  --ember-wash: 9%;                           /* how much colour inside */
+  --btn-fg: var(--text-hi);
+  border-color: transparent;
+  background-image:
+    /* Inside: opaque, so the ring around it stays a clean line. */
+    linear-gradient(100deg,
+      color-mix(in srgb, var(--ember-1) var(--ember-wash), var(--bg)) 0%,
+      color-mix(in srgb, var(--ember-2) var(--ember-wash), var(--bg)) 16.67%,
+      color-mix(in srgb, var(--ember-1) var(--ember-wash), var(--bg)) 33.33%,
+      color-mix(in srgb, var(--ember-2) var(--ember-wash), var(--bg)) 50%,
+      color-mix(in srgb, var(--ember-1) var(--ember-wash), var(--bg)) 66.67%,
+      color-mix(in srgb, var(--ember-2) var(--ember-wash), var(--bg)) 83.33%,
+      color-mix(in srgb, var(--ember-1) var(--ember-wash), var(--bg)) 100%),
+    /* The ring. */
+    linear-gradient(100deg,
+      color-mix(in srgb, var(--ember-1) calc(var(--ember-ring) * 0.45), transparent) 0%,
+      color-mix(in srgb, var(--ember-2) var(--ember-ring), transparent) 16.67%,
+      color-mix(in srgb, var(--ember-1) calc(var(--ember-ring) * 0.45), transparent) 33.33%,
+      color-mix(in srgb, var(--ember-2) var(--ember-ring), transparent) 50%,
+      color-mix(in srgb, var(--ember-1) calc(var(--ember-ring) * 0.45), transparent) 66.67%,
+      color-mix(in srgb, var(--ember-2) var(--ember-ring), transparent) 83.33%,
+      color-mix(in srgb, var(--ember-1) calc(var(--ember-ring) * 0.45), transparent) 100%);
+  background-origin: padding-box, border-box;
+  background-clip: padding-box, border-box;
+  background-size: 300% 100%;
+  background-position: 0% 50%;
+  animation: ember-drift 13s linear infinite;
+  letter-spacing: 0.14em;
+}
+.btn--ember .icon { color: var(--gold-text); }
+.btn--ember:hover { --ember-ring: 100%; --ember-wash: 16%; }
+/*
+  Open. The pair is a set of switches, so the one that is on has to look it:
+  the gradient comes up and the label goes gold, which is the page's own
+  "this is the live one" colour.
+*/
+.work-actions .btn--ember[aria-expanded='true'] {
+  --ember-ring: 100%;
+  --ember-wash: 20%;
+  --btn-fg: var(--gold-text);
+}
+
+@keyframes ember-drift {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: -200% 50%; }
+}
+
+/*
+  Lighter inside than the dark theme allows itself. The label of an open one
+  goes gold, and gold on a warm near-white is already close to the floor for
+  12px text — a heavy wash under it pushed it under 4.5:1.
+*/
+:root[data-theme='light'] .btn--ember { --ember-wash: 10%; }
+:root[data-theme='light'] .btn--ember:hover { --ember-wash: 16%; }
+:root[data-theme='light'] .work-actions .btn--ember[aria-expanded='true'] { --ember-wash: 12%; }
+
 /* Text link with a trailing arrow that nudges on hover.
    Also used on <button>, so the native button chrome has to be reset here. */
 .link-arrow {
@@ -3156,6 +3233,8 @@ a.glass-card:active, .glass-card--interactive:active { transform: translateY(-1p
   border-color: rgba(242, 169, 59, 0.55);
   color: var(--gold-text);
 }
+/* ...except the gradient pair, whose edge is the gradient itself. */
+.work-actions .btn--ember[aria-expanded='true'] { border-color: transparent; }
 
 .industry-layout,
 .photo-layout {
@@ -3503,6 +3582,7 @@ html[data-cursor='on'] :is(input, textarea, select, [contenteditable='true'], [c
   .hero-content, .hero-foot { opacity: 1 !important; transform: none !important; }
   a.glass-card:hover, .glass-card--interactive:hover,
   .btn:hover, .icon-btn:hover, .nav-menu-links a:hover { transform: none; }
+  .btn--ember { animation: none; }
   .win-card:hover .media, .carousel-track > *:hover .media { transform: none; }
 
   /* Unravel opens instantly rather than animating. */
