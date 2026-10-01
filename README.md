@@ -591,6 +591,15 @@ all if you would rather not give a number. Leave it empty and the real number is
 or Cloudinary link: one of their videos, or a separate upload. Leave it blank and their
 first video is used. It leads their Selected reels and Recent Wins cards.
 
+### Photography
+
+Each category on Our Work is a row you press to open. Inside, its cover photo sits beside a
+row of the rest, which travels sideways on its own; press any photograph and it opens full
+size, with the whole category behind it — the arrows either side, or the left and right keys
+on a keyboard, walk through them, and Escape or the cross closes it.
+
+Add and arrange them under **Manage photography** in edit mode.
+
 ## Login
 
 A **Login** button links to Advatar's client app at **https://app.advatar.co.uk**. It's an

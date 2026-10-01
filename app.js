@@ -203,7 +203,7 @@ let openModalCleanup = null;
  * Focus-trapped dialog. Escape closes, click-outside closes, focus returns to
  * whatever opened it.
  */
-function openModal({ title, subtitle = '', body, onMount, labelledBy = 'modal-title', className = '' }) {
+function openModal({ title, subtitle = '', body, onMount, onClose, labelledBy = 'modal-title', className = '' }) {
   closeModal();
 
   const opener = document.activeElement;
@@ -263,6 +263,9 @@ function openModal({ title, subtitle = '', body, onMount, labelledBy = 'modal-ti
   document.addEventListener('keydown', onKeydown);
 
   openModalCleanup = () => {
+    // Anything the dialog wired up outside itself — a key listener on the
+    // document, say — gets undone before the dialog goes.
+    onClose?.();
     document.removeEventListener('keydown', onKeydown);
     backdrop.remove();
     document.body.style.overflow = '';
@@ -1430,6 +1433,24 @@ async function renderOurWork() {
     </div>`;
   };
 
+  /*
+    One photograph, as something you can press to see it properly.
+
+    It is a <button> rather than a plain picture so it answers to a finger, to
+    Tab and to Enter alike, and so the cursor and the hover lift say plainly
+    that there is more to see. The full-size address rides along in data-photo:
+    the viewer collects every one inside the same category, in the order they
+    appear, so whichever you press you can then walk through the rest.
+  */
+  const photoTile = (url, label, ratio = 'square') => {
+    const shown = assetUrl(url, 900);
+    if (!shown) return '';
+    return `<button type="button" class="photo-open media media--${ratio}"
+                    data-photo="${esc(url)}" aria-label="Enlarge ${esc(label)}">
+      <img src="${shown}" alt="${esc(label)}" loading="lazy" decoding="async">
+    </button>`;
+  };
+
   const photoCategory = (category, index) => `
     <div class="disclosure" data-reveal style="--i:${index}">
       <button type="button" class="disclosure-head" data-toggle="photo-${esc(category.id)}"
@@ -1439,10 +1460,20 @@ async function renderOurWork() {
       </button>
       <div class="disclosure-panel" id="photo-${esc(category.id)}" hidden data-animate="true">
         <div class="photo-layout">
-          ${mediaTile({ imageUrl: category.coverPhotoUrl, title: `${category.name} — cover`, ratio: 'square', empty: 'Cover photo coming soon' })}
+          ${photoTile(category.coverPhotoUrl, `${category.name} — cover`)
+            || mediaTile({ imageUrl: '', title: '', ratio: 'square', empty: 'Cover photo coming soon' })}
           ${category.photos?.length
-            ? `<div class="photo-grid">${category.photos.map((photo, index) =>
-                mediaTile({ imageUrl: photo, title: `${category.name} ${index + 1}`, ratio: 'square' })).join('')}</div>`
+            ? /*
+                The set travels sideways on its own, like the reels do. The row
+                is only built when the category is opened — a carousel inside a
+                closed panel has no width to measure — which setPanel handles.
+              */
+              `<div class="carousel carousel--photos" data-carousel>
+                 <div class="carousel-track" data-autoscroll="true">
+                   ${category.photos.map((photo, number) =>
+                     photoTile(photo, `${category.name} ${number + 1}`)).join('')}
+                 </div>
+               </div>`
             : `<p class="tiny">No ${esc(category.name.toLowerCase())} photos added yet.</p>`}
         </div>
       </div>
@@ -1612,6 +1643,90 @@ async function renderOurWork() {
 function mountOurWork() {
   $('[data-results-modal]')?.addEventListener('click', openCaseStudies);
   mountCarousel($('.carousel--reels'));
+
+  /*
+    Delegated, because the photographs are inside panels that are built before
+    they are ever opened, and the carousel makes copies of them for its loop
+    once they are. One listener on the page covers all of it.
+  */
+  $('main')?.addEventListener('click', (event) => {
+    const pressed = event.target.closest('[data-photo]');
+    if (!pressed) return;
+    /*
+      Everything in the same category, in the order shown — and the copies the
+      carousel made for its loop dropped, or the same picture would come round
+      again halfway through. The clicked one is found by its address rather
+      than by counting, since a copy is not the element that was pressed.
+    */
+    const panel = pressed.closest('.disclosure-panel') ?? pressed.closest('main');
+    const photos = $$('[data-photo]', panel)
+      .filter((node) => !node.closest('[data-clone="true"]'))
+      .map((node) => node.dataset.photo);
+    const unique = [...new Set(photos)];
+    openPhotoViewer(unique, Math.max(0, unique.indexOf(pressed.dataset.photo)));
+  });
+}
+
+/**
+ * A photograph at full size, with the rest of its category behind it.
+ *
+ * The picture is shown whole rather than cropped to the window — a photograph
+ * you have opened to look at properly should not lose its edges to the shape
+ * of the screen. Left and right walk through the set, by button or by arrow
+ * key, and it wraps round at either end so there is no dead press.
+ */
+function openPhotoViewer(photos, startIndex = 0) {
+  if (!photos.length) return;
+  let at = startIndex;
+  let onKey = null;
+
+  const many = photos.length > 1;
+  const body = `
+    <div class="photo-viewer">
+      <img class="photo-viewer-img" src="${assetUrl(photos[at], 1800)}" alt="" decoding="async">
+      ${many ? `
+        <button type="button" class="photo-viewer-step photo-viewer-step--prev" data-step="-1"
+                aria-label="Previous photo">${icon('chevronRight')}</button>
+        <button type="button" class="photo-viewer-step photo-viewer-step--next" data-step="1"
+                aria-label="Next photo">${icon('chevronRight')}</button>
+        <p class="photo-viewer-count tiny" aria-live="polite"></p>` : ''}
+    </div>`;
+
+  openModal({
+    title: 'Photo',
+    className: 'modal--photo',
+    body,
+    onMount(host) {
+      const image = $('.photo-viewer-img', host);
+      const count = $('.photo-viewer-count', host);
+
+      const show = (next) => {
+        at = (next + photos.length) % photos.length;
+        image.src = assetUrl(photos[at], 1800);
+        if (count) count.textContent = `${at + 1} of ${photos.length}`;
+      };
+      show(at);
+
+      host.addEventListener('click', (event) => {
+        const step = event.target.closest('[data-step]');
+        if (step) show(at + Number(step.dataset.step));
+      });
+
+      if (!many) return;
+      // The arrow keys walk the set. Removed again when the dialog closes,
+      // through onClose below.
+      onKey = (event) => {
+        if (event.key === 'ArrowRight') show(at + 1);
+        else if (event.key === 'ArrowLeft') show(at - 1);
+        else return;
+        event.preventDefault();
+      };
+      document.addEventListener('keydown', onKey);
+    },
+    onClose() {
+      if (onKey) document.removeEventListener('keydown', onKey);
+    },
+  });
 }
 
 /**
