@@ -1260,10 +1260,11 @@ const CATEGORY_ORDER = [
  * named in either list falls to the end, alphabetically. Within an industry,
  * clients follow their own Order number.
  *
- * A client appears under every industry they belong to. `primaryOnly` files
- * each one under their Industry alone, which is what a list meant to name
- * everybody exactly once needs — the full client index, and the editor where
- * the Order numbers are set (one number per client, so one row per client).
+ * A client appears under every industry they belong to, in the industry view
+ * and in the full index alike. `primaryOnly` files each one under their
+ * Industry alone, which is what the Order editor needs: there is one Order
+ * number per client, so a client asked for twice would keep only the second
+ * answer.
  */
 /** A name reduced to something safe to put in an id: "Food & Beverage" -> "food-beverage". */
 const slug = (name) => String(name ?? '')
@@ -1348,7 +1349,6 @@ async function renderOurWork() {
   const featured = clients.filter((client) => client.featured).slice(0, 12);
   const stats = settings.resultsStats ?? [];
   const industries = industriesOf(clients);
-  const indexGroups = industriesOf(clients, { primaryOnly: true });
 
   const resultsRow = stats.length
     ? stats.map((stat) =>
@@ -1594,14 +1594,17 @@ async function renderOurWork() {
                 <h3 class="display display--md" data-copy="work.all.title">Everyone we've worked with.</h3>
               </div>
               <p class="lede">${esc(state.settings?.workClientsLabel || `${clients.length} client${clients.length === 1 ? '' : 's'}.`)}
-                <span class="dim" data-copy="work.all.lede-dim">Listed once each, under their primary category.</span></p>
+                <span class="dim" data-copy="work.all.lede-dim">Grouped by industry — anyone working across more than one is listed under each.</span></p>
               ${editOnly(`<button type="button" class="edit-chip" data-edit="client-count">${icon('pencil')} Edit this line</button>`)}
             </div>
 
-            ${indexGroups.map(([name, group]) => `
+            ${industries.map(([name, group]) => `
               <div class="client-index" data-reveal>
                 <h4 class="client-index-head"><span>${esc(name)}</span></h4>
-                ${clientTable(group, 'idx', `No clients in ${esc(name)} yet — add them in edit mode.`)}
+                ${/* The scope carries the industry, as in the industry view above:
+                      one client under two headings must not give two panels the
+                      same id, or opening one would work the other. */''}
+                ${clientTable(group, `idx-${slug(name)}`, `No clients in ${esc(name)} yet — add them in edit mode.`)}
               </div>`).join('')}
         </div>
       </div>
@@ -3731,13 +3734,22 @@ function fieldHtml(field, value) {
                 ${label}
               </div>`;
 
-    case 'select':
-      return `<div class="field field--select">${label}
-                <select id="${id}" name="${esc(field.name)}">
-                  ${field.options.map((option) =>
-                    `<option value="${esc(option)}" ${option === value ? 'selected' : ''}>${esc(option)}</option>`).join('')}
-                </select>${icon('chevronDown')}${hint}
+    case 'select': {
+      // The list may be a function, so it can be read when the editor opens
+      // rather than when the field was declared — industries change as clients
+      // are added. A stored value that is no longer offered is kept in the
+      // list, or opening and saving a record would quietly change it.
+      const choices = typeof field.options === 'function' ? field.options() : field.options;
+      const options = !value || choices.includes(String(value)) ? choices : [...choices, String(value)];
+      return `<div class="field">${label}
+                <span class="field--select rows-select">
+                  <select id="${id}" name="${esc(field.name)}">
+                    ${options.map((option) =>
+                      `<option value="${esc(option)}" ${option === value ? 'selected' : ''}>${esc(option)}</option>`).join('')}
+                  </select>${icon('chevronDown')}
+                </span>${hint}
               </div>`;
+    }
 
     case 'lines': {
       const text = Array.isArray(value) ? value.join('\n') : '';
@@ -4022,11 +4034,15 @@ const BACKGROUND_HINT = 'Cloudinary videos and images are both re-encoded and si
 
 const CLIENT_FIELDS = [
   { name: 'name', label: 'Client name', type: 'text' },
-  { name: 'category', label: 'Industry', type: 'text', hint: 'Groups the client on Our Work — e.g. "Personal Brands & Creators".' },
+  {
+    name: 'category', label: 'Industry', type: 'select', options: industryOptions,
+    hint: 'Where this client mainly belongs on Our Work. To offer an industry that isn\'t '
+      + 'in this list yet, add it under Industry order on Our Work and it appears here.',
+  },
   {
     name: 'extraCategories', label: 'Also in', type: 'rows', addLabel: 'Add an industry',
-    hint: 'Other industries this client belongs to. They show under every one, and are still '
-      + 'listed once in View all client work.',
+    hint: 'Other industries this client belongs to. They are listed under every one of them, '
+      + 'both here and in View all client work. The client count is unchanged.',
     // A list, not a fixed one: it is read when the editor opens, so an industry
     // added to another client today is offered here today.
     columns: [{ key: 'name', label: 'Industry', options: industryOptions }],
@@ -4293,9 +4309,16 @@ function mountEditHandlers() {
 function industryOptions() {
   const known = industriesOf(state.clients ?? []).map(([name]) => name);
   const used = (state.settings?.industryReels ?? []).map((row) => row.industry).filter(Boolean);
-  // CATEGORY_ORDER too, so the standard industries can be picked before anyone
-  // is in them — which is the whole point of an "Also in" list.
-  return [...new Set([...known, ...used, ...CATEGORY_ORDER])].filter(Boolean);
+  const named = state.settings?.industryOrder ?? [];
+  /*
+    Everything that could reasonably be picked: the industries clients are in,
+    the ones with reels, the ones named under Industry order, and the standard
+    list. Industry order is how a brand-new industry gets into these menus,
+    since both of them only offer what is already known.
+  */
+  return [...new Set([...named, ...known, ...used, ...CATEGORY_ORDER])]
+    .map((name) => String(name ?? '').trim())
+    .filter(Boolean);
 }
 
 function openClientOrderEditor() {

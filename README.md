@@ -560,15 +560,16 @@ these two closes the other, so what you pressed always appears directly undernea
 
 ### A client in more than one industry
 
-**Industry** is where a client mainly belongs. **Also in**, just under it, takes as many more
-as you like — press **Add an industry** and pick one from the list.
+**Industry** is where a client mainly belongs — a dropdown, so the spelling always matches.
+**Also in**, just under it, takes as many more as you like: press **Add an industry** and
+pick another from the same list.
 
-They then show under every industry they are in, so a gym that is also a personal brand is
-found under both. **View all client work** still lists everybody exactly once, under their
-main Industry, and the client count is unchanged.
+They are then listed under every industry they are in, both under **See more by industry**
+and in **View all client work**, so a gym that is also a personal brand is found under both.
+The client count at the top is unchanged — it counts clients, not entries.
 
-The list offers every industry already in use plus the standard ones, so you can file
-someone under an industry before anyone else is in it.
+Both dropdowns offer every industry already in use plus the standard ones. To offer one
+that isn't there yet, add it under **Industry order** on Our Work and it appears in both.
 
 ### Arranging Our Work
 
