@@ -2078,11 +2078,23 @@ async function renderLookInside() {
 
   // The step's short name, number included. Rendered twice: pinned beside the
   // line on desktop, and above the text on mobile where there's no room for it.
-  const label = (step, index, extra = '') => `
-    <div class="process-label ${extra}">
+  /*
+    `zoom` wraps the contents in a layer of their own. The reveal already uses
+    the transform on .process-label and .process-body, and the scroll zoom has
+    to be able to change every frame while the reveal eases over half a second
+    — two transforms with different timing can't share one element, so they get
+    one each. The inline copy of the label sits inside the body's zoom already,
+    so it asks for none of its own.
+  */
+  const label = (step, index, extra = '', zoom = false) => {
+    const inner = `
       <span class="process-num">${String(index + 1).padStart(2, '0')}</span>
-      <h2 class="process-title" data-copy="look.step.${index + 1}.label">${esc(step.label)}</h2>
+      <h2 class="process-title" data-copy="look.step.${index + 1}.label">${esc(step.label)}</h2>`;
+    return `
+    <div class="process-label ${extra}">
+      ${zoom ? `<div class="process-zoom">${inner}</div>` : inner}
     </div>`;
+  };
 
   return `
   <main id="main" class="page">
@@ -2114,13 +2126,15 @@ async function renderLookInside() {
             <article class="process-step" data-step="${index}" data-shown="false" data-lit="false" data-current="false">
               <div class="process-marker">
                 <span class="process-dot" aria-hidden="true"></span>
-                ${label(step, index, 'process-label--pinned')}
+                ${label(step, index, 'process-label--pinned', true)}
               </div>
               <div class="process-body">
-                ${label(step, index, 'process-label--inline')}
-                <h3 class="process-heading" data-copy="look.step.${index + 1}.title">${esc(step.title)}</h3>
-                <p class="process-copy" data-copy="look.step.${index + 1}.copy">${esc(step.copy)}</p>
-                ${imageFor(index + 1)}
+                <div class="process-zoom">
+                  ${label(step, index, 'process-label--inline')}
+                  <h3 class="process-heading" data-copy="look.step.${index + 1}.title">${esc(step.title)}</h3>
+                  <p class="process-copy" data-copy="look.step.${index + 1}.copy">${esc(step.copy)}</p>
+                  ${imageFor(index + 1)}
+                </div>
               </div>
             </article>`).join('')}
         </div>
@@ -2200,20 +2214,48 @@ function mountLookInside() {
     it, and the last lit marker is the current step. Markers are sticky, so their
     positions are read live on each frame rather than cached.
   */
+  /*
+    EACH STEP SWELLS AS YOU REACH IT AND SETTLES BACK AS YOU LEAVE.
+
+    How close a step is to being read is how far its middle is from the reading
+    line, as a fraction of three-quarters of the screen. Smoothed, so it eases
+    in and out rather than tracking the scroll in a straight line, and written
+    out as --zoom for the CSS to scale by. One step is swelling while the one
+    before it is settling, which is what makes the page feel like it is moving
+    through them rather than past them.
+
+    Where the system asks for less movement, nothing is written and every step
+    stays at its own size.
+  */
+  const zoomy = !prefersReducedMotion();
+  const ZOOM_MIN = 0.97;
+  const ZOOM_MAX = 1.04;
+
+  // The dots are looked up once; this runs on every frame of every scroll.
+  const dots = steps.map((step) => step.querySelector('.process-dot'));
+
   let ticking = false;
   function update() {
     ticking = false;
     const rect = process.getBoundingClientRect();
-    const reading = window.innerHeight * 0.55;
+    const view = window.innerHeight;
+    const reading = view * 0.55;
     const fill = Math.min(Math.max(reading - rect.top, 0), rect.height);
     process.style.setProperty('--fill', `${fill.toFixed(1)}px`);
 
     let current = -1;
     steps.forEach((step, index) => {
-      const dot = step.querySelector('.process-dot').getBoundingClientRect();
+      const dot = dots[index].getBoundingClientRect();
       const lit = dot.top + dot.height / 2 <= reading;
       step.dataset.lit = String(lit);
       if (lit) current = index;
+
+      if (!zoomy) return;
+      const box = step.getBoundingClientRect();
+      const away = Math.abs(box.top + box.height / 2 - reading) / (view * 0.75);
+      const near = Math.max(0, 1 - Math.min(1, away));
+      const eased = near * near * (3 - 2 * near);          // smoothstep
+      step.style.setProperty('--zoom', (ZOOM_MIN + (ZOOM_MAX - ZOOM_MIN) * eased).toFixed(4));
     });
     steps.forEach((step, index) => { step.dataset.current = String(index === current); });
   }

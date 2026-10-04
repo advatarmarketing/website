@@ -2201,6 +2201,20 @@ video.hero-hand { height: auto; object-fit: contain; }
 }
 .process-step[data-current='true'] .process-dot::after { transform: scale(1.18); }
 
+/*
+  The size each step is drawn at, set from the scroll position (mountLookInside
+  in app.js). A layer of its own: .process-label and .process-body already use
+  their transform for the reveal, which eases over half a second, while this one
+  has to answer the scroll on every frame.
+
+  It grows from the left so the words stay put against the line rather than
+  drifting sideways as they swell.
+*/
+.process-zoom {
+  transform: scale(var(--zoom, 1));
+  transform-origin: left center;
+}
+
 /* The name and the text reveal together as the step arrives. */
 .process-label,
 .process-body {
@@ -3619,6 +3633,7 @@ html[data-cursor='on'] :is(input, textarea, select, [contenteditable='true'], [c
 
   /* Unravel opens instantly rather than animating. */
   .disclosure-panel--animated { transition: none; }
+  .process-zoom { transform: none; }
 
   /* The sheen stops drifting but the gradient still paints, so headings keep
      their fill and never go transparent. */
