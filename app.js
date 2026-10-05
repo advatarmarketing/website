@@ -2167,7 +2167,33 @@ function mountStepClips() {
     return;
   }
 
-  const watcher = new IntersectionObserver((entries) => {
+  /*
+    FETCHING AND PLAYING ARE TWO DIFFERENT MOMENTS.
+
+    A clip used to do both as soon as it came within a quarter-screen of the
+    edge, which meant the ones below the fold were already running before you
+    had scrolled anywhere near them. Now:
+
+      loader  — half a screen out, the file starts downloading, so it is ready
+                by the time you arrive. Nothing plays.
+      player  — it plays only once it is properly on screen: at least half of
+                it inside the middle band, with the top and bottom fifths of
+                the window not counting. Leaving that band pauses it again,
+                and it carries on from where it stopped when you come back.
+  */
+  const loader = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const clip = entry.target;
+      if (!clip.src) {
+        clip.src = clip.dataset.clip;
+        clip.preload = 'auto';
+      }
+      loader.unobserve(clip);          // downloaded once; nothing more to watch for
+    }
+  }, { rootMargin: '50% 0px' });
+
+  const player = new IntersectionObserver((entries) => {
     for (const entry of entries) {
       const clip = entry.target;
       if (!entry.isIntersecting) { clip.pause(); continue; }
@@ -2178,10 +2204,10 @@ function mountStepClips() {
       // A play() that can't start (a tab in the background) isn't a problem.
       clip.play().catch(() => {});
     }
-  }, { rootMargin: '25% 0px' });
+  }, { rootMargin: '-20% 0px -20% 0px', threshold: 0.5 });
 
-  clips.forEach((clip) => watcher.observe(clip));
-  registerCleanup(() => watcher.disconnect());
+  clips.forEach((clip) => { loader.observe(clip); player.observe(clip); });
+  registerCleanup(() => { loader.disconnect(); player.disconnect(); });
 }
 
 function mountLookInside() {
@@ -2218,18 +2244,30 @@ function mountLookInside() {
     EACH STEP SWELLS AS YOU REACH IT AND SETTLES BACK AS YOU LEAVE.
 
     How close a step is to being read is how far its middle is from the reading
-    line, as a fraction of three-quarters of the screen. Smoothed, so it eases
-    in and out rather than tracking the scroll in a straight line, and written
-    out as --zoom for the CSS to scale by. One step is swelling while the one
-    before it is settling, which is what makes the page feel like it is moving
-    through them rather than past them.
+    line, as a fraction of two-thirds of the screen — a shorter reach than the
+    distance between steps, so each one is down to its smallest before the next
+    starts to grow, rather than the two meeting somewhere in the middle.
+
+    Smoothed, so it eases in and out rather than tracking the scroll in a
+    straight line, and written out as --zoom for the CSS to scale by. One step
+    is swelling while the one before it is settling, which is what makes the
+    page feel like it is moving through them rather than past them.
 
     Where the system asks for less movement, nothing is written and every step
     stays at its own size.
   */
   const zoomy = !prefersReducedMotion();
-  const ZOOM_MIN = 0.97;
-  const ZOOM_MAX = 1.04;
+  /*
+    A wide swing on purpose: a step well away from the reading line is a fifth
+    smaller than the one you are on, so the page reads as moving through them.
+
+    THE SWING GOES DOWN, NOT UP. The step you are on is drawn at very close to
+    its own size and the rest shrink away from it — the other way round, the
+    text of the step you are reading grew wider than the column it is wrapped
+    to and ran off the side of a phone. Same contrast, nothing clipped.
+  */
+  const ZOOM_MIN = 0.80;
+  const ZOOM_MAX = 1.02;
 
   // The dots are looked up once; this runs on every frame of every scroll.
   const dots = steps.map((step) => step.querySelector('.process-dot'));
@@ -2252,7 +2290,7 @@ function mountLookInside() {
 
       if (!zoomy) return;
       const box = step.getBoundingClientRect();
-      const away = Math.abs(box.top + box.height / 2 - reading) / (view * 0.75);
+      const away = Math.abs(box.top + box.height / 2 - reading) / (view * 0.66);
       const near = Math.max(0, 1 - Math.min(1, away));
       const eased = near * near * (3 - 2 * near);          // smoothstep
       step.style.setProperty('--zoom', (ZOOM_MIN + (ZOOM_MAX - ZOOM_MIN) * eased).toFixed(4));

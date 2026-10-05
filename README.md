@@ -129,10 +129,15 @@ link, and add a caption if you like.
 A step without a link just shows its words — visitors see no empty box. In edit mode a slim
 dashed note sits where the picture would go, as a reminder that you can add one there.
 
-**The steps swell as you scroll.** Whichever step you have reached is drawn a little larger
-and settles back as you pass it, so one is always rising while the one before it falls away.
-It happens on a phone as well as a computer, and there is nothing to set up. Anyone who has
-asked for less movement in their system settings sees every step at one size instead.
+**The steps swell as you scroll.** Whichever step you have reached is drawn at full size and
+the rest shrink to about four-fifths of it, so one is always rising while the one before it
+falls away. It happens on a phone as well as a computer, and there is nothing to set up.
+Anyone who has asked for less movement in their system settings sees every step at one size
+instead.
+
+**A clip on a step waits for you.** It downloads about half a screen before you reach it, so
+it is ready, but it does not start until the step is properly on screen — and it pauses again
+once you have scrolled past, picking up where it left off if you come back.
 
 **Three kinds of link work in the box:**
 
