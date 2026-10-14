@@ -135,6 +135,11 @@ falls away. It happens on a phone as well as a computer, and there is nothing to
 Anyone who has asked for less movement in their system settings sees every step at one size
 instead.
 
+**Each step takes about two seconds to pass.** A step is most of a screen tall, so there is
+roughly 700 pixels of scrolling between one and the next — three times what it was — and the
+timeline can no longer be flicked past in one go. Nothing holds the scroll back; the page
+simply has further to travel, so it still answers the wheel like every other page.
+
 **A clip on a step waits for you.** It downloads about half a screen before you reach it, so
 it is ready, but it does not start until the step is properly on screen — and it pauses again
 once you have scrolled past, picking up where it left off if you come back.
@@ -630,6 +635,13 @@ tall menu — so nothing is cropped. Press any piece to see it full size; the ar
 left and right keys, walk through the rest of the branding wall.
 
 Add and arrange them under **Manage branding** in edit mode.
+
+### Social links
+
+The three buttons at the foot of every page go to Instagram, TikTok and LinkedIn. They are
+set in `SOCIAL_LINKS` near the top of `app.js` — one line each — rather than in edit mode,
+since they change about once a decade. A service left out of that list shows the same icon
+with nothing behind it.
 
 ## Login
 

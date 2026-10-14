@@ -2156,7 +2156,26 @@ video.hero-hand { height: auto; object-fit: contain; }
   display: grid;
   grid-template-columns: minmax(0, 26rem) minmax(0, 1fr);
   column-gap: clamp(2rem, 5vw, 5rem);
-  padding-top: clamp(5rem, 11vw, 9rem);
+  /*
+    HOW TALL A STEP IS, IS WHAT SETS THE PACE OF THE PAGE.
+
+    A step used to take about 230px of scrolling — a quarter of a screen — so
+    the whole timeline went by in a flick and each step's swell was over before
+    you had read its name. A step is now most of a screen tall, which at an
+    ordinary reading scroll is roughly two seconds on each one.
+
+    It is the room around the step rather than a brake on the scroll itself:
+    the page still answers the wheel exactly as every other page does, it
+    simply has further to go.
+
+    The words sit in the MIDDLE of that room, not at the top of it. Given as
+    space above each step instead, every step ended with a screen and a half of
+    nothing under it, which reads as a page that has run out rather than one
+    that is taking its time.
+  */
+  min-height: 86vh;
+  align-content: center;
+  padding-top: clamp(2rem, 5vw, 4rem);
 }
 
 .process-marker {
@@ -2323,7 +2342,9 @@ video.hero-hand { height: auto; object-fit: contain; }
   .process-step {
     grid-template-columns: var(--dot) minmax(0, 1fr);
     column-gap: 1.1rem;
-    padding-top: 3.75rem;
+    /* The same pacing as the wide layout — see .process-step above. */
+    min-height: 84vh;
+    padding-top: 2rem;
   }
   .process-label--pinned { display: none; }
   .process-label--inline { display: block; margin-bottom: 0.9rem; opacity: 1; transform: none; }
@@ -2336,7 +2357,15 @@ video.hero-hand { height: auto; object-fit: contain; }
 .bts-strip {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(13rem, 1fr);
+  /*
+    A fixed width per photo, not a share of the row. It used to be
+    minmax(13rem, 1fr), and 1fr means "split what is left between you" — so
+    with one photo in the gallery that one photo was stretched across the
+    whole page. The strip scrolls sideways, so its items should each be their
+    own size however many there are.
+  */
+  grid-auto-columns: clamp(12rem, 24vw, 17rem);
+  justify-content: start;
   gap: 0.85rem;
   overflow-x: auto;
   scroll-snap-type: x mandatory;

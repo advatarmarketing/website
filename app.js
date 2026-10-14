@@ -445,10 +445,27 @@ function navFragment(path) {
   </header>`;
 }
 
+/* Where the footer's three social buttons go. */
+const SOCIAL_LINKS = {
+  instagram: 'https://www.instagram.com/advatar.marketing/',
+  tiktok: 'https://www.tiktok.com/@advatar.uk',
+  linkedin: 'https://www.linkedin.com/company/advatar-uk',
+};
+
 function footerFragment(settings) {
   const email = settings?.contact?.email || 'marketing@advatar.co.uk';
-  const social = (name, label) =>
-    `<span class="icon-btn" role="img" aria-label="${esc(label)} — link coming soon">${icon(name)}</span>`;
+  /*
+    Each one opens in a new tab, as a link off the site should, and carries the
+    name of the service for a screen reader — the icon alone says nothing to one.
+    A service with no address yet stays the plain, unpressable mark it was.
+  */
+  const social = (name, label) => {
+    const href = SOCIAL_LINKS[name];
+    return href
+      ? `<a class="icon-btn" href="${esc(href)}" target="_blank" rel="noopener noreferrer"
+            aria-label="Advatar on ${esc(label)}">${icon(name)}</a>`
+      : `<span class="icon-btn" role="img" aria-label="${esc(label)} — link coming soon">${icon(name)}</span>`;
+  };
 
   return `
   <footer class="footer">
