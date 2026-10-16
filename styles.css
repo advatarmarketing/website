@@ -2352,6 +2352,15 @@ video.hero-hand { height: auto; object-fit: contain; }
   .process-media { margin-top: 1.25rem; }
 }
 
+/*
+  The results are the opening line of the page rather than a section in their
+  own right, so the room under them is cut back: the reels that follow read as
+  the answer to "Our Drive? Results." instead of a separate chapter a screen
+  further down. Only this one join is tightened; every other section keeps the
+  page's usual rhythm.
+*/
+#results { padding-bottom: clamp(2rem, 4vw, 3.5rem); }
+
 /* ============================================ What's your industry? ====== */
 
 /*
@@ -2991,26 +3000,45 @@ video.hero-hand { height: auto; object-fit: contain; }
   transition: opacity 900ms var(--ease-out) 1s, transform 900ms var(--ease-out) 1s;
 }
 /*
-  A glow around the word itself. drop-shadow follows the shape of the letters,
-  where a box-shadow would only ring the line box — and the word is filled by a
-  clipped gradient, so this is the one way to light its actual edges. It
-  breathes rather than sits, on the same slow cycle the arrows use.
+  A WHITE LIGHT THAT TRAVELS ROUND THE WORD.
+
+  drop-shadow follows the shape of the letters, where a box-shadow would only
+  ring the line box — and the word is filled by a clipped gradient, so this is
+  the one way to light its actual edges.
+
+  Moving the shadow's offset around a small circle walks the lit edge round the
+  outside of the word: at the start the light is off to the right, a moment
+  later below it, and so on back round to where it began. CSS cannot work out
+  a circle on its own, so the twelve points of it are written out — every
+  thirty degrees at a four-pixel radius, which is close enough to read as one
+  continuous travel rather than a dozen steps.
 */
 .results-title[data-shown='true'] .results-word {
-  animation: sheen-drift 7s linear infinite, results-halo 4.5s ease-in-out infinite;
+  animation: sheen-drift 7s linear infinite, results-trace 3.6s linear infinite;
 }
-@keyframes results-halo {
-  0%, 100% { filter: drop-shadow(0 0 6px var(--gold-glow)) drop-shadow(0 0 20px transparent); }
-  50%      { filter: drop-shadow(0 0 12px var(--gold-glow)) drop-shadow(0 0 34px var(--gold-glow)); }
+@keyframes results-trace {
+  0%   { filter: drop-shadow( 4.00px  0.00px 5px #fff); }
+  8.33%{ filter: drop-shadow( 3.46px  2.00px 5px #fff); }
+  16.6%{ filter: drop-shadow( 2.00px  3.46px 5px #fff); }
+  25%  { filter: drop-shadow( 0.00px  4.00px 5px #fff); }
+  33.3%{ filter: drop-shadow(-2.00px  3.46px 5px #fff); }
+  41.6%{ filter: drop-shadow(-3.46px  2.00px 5px #fff); }
+  50%  { filter: drop-shadow(-4.00px  0.00px 5px #fff); }
+  58.3%{ filter: drop-shadow(-3.46px -2.00px 5px #fff); }
+  66.6%{ filter: drop-shadow(-2.00px -3.46px 5px #fff); }
+  75%  { filter: drop-shadow( 0.00px -4.00px 5px #fff); }
+  83.3%{ filter: drop-shadow( 2.00px -3.46px 5px #fff); }
+  91.6%{ filter: drop-shadow( 3.46px -2.00px 5px #fff); }
+  100% { filter: drop-shadow( 4.00px  0.00px 5px #fff); }
 }
 .results-title[data-shown='true'] .results-word { opacity: 1; transform: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .results-word { transition: none; opacity: 1; transform: none; }
-  /* Keep the halo, lose the pulse. */
+  /* Keep a halo, lose the travel. */
   .results-title[data-shown='true'] .results-word {
     animation: none;
-    filter: drop-shadow(0 0 10px var(--gold-glow));
+    filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.8));
   }
 }
 
