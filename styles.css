@@ -2373,7 +2373,8 @@ video.hero-hand { height: auto; object-fit: contain; }
   grid-template-columns: minmax(0, 1fr);
 }
 @media (min-width: 820px) {
-  .industry-pick { grid-template-columns: minmax(0, 15rem) minmax(0, 1fr); }
+  .industry-pick { grid-template-columns: auto minmax(0, 1fr); }
+  .industry-pick-media { justify-self: start; }
 }
 
 /*
@@ -2381,13 +2382,20 @@ video.hero-hand { height: auto; object-fit: contain; }
   height as the industry changes — a box that jumped between shapes every few
   seconds would drag the whole page about under the reader.
 */
+/*
+  The frame is the shape of whatever is in it, set from the clip's own poster
+  (see mountIndustryPicker). Its HEIGHT is what stays put and the width follows
+  — a square clip makes a square player beside the same words, rather than the
+  card growing and shrinking and shoving the page about as it cycles.
+*/
 .industry-pick-media {
   position: relative;
-  aspect-ratio: 9 / 16;
-  max-height: 24rem;
-  margin-inline: auto;
-  width: 100%;
-  max-width: 15rem;
+  aspect-ratio: var(--pick-ar, 0.5625);
+  height: 24rem;
+  width: auto;
+  max-width: 100%;
+  justify-self: center;
+  transition: aspect-ratio 420ms var(--ease);
   border-radius: 18px;
   overflow: hidden;
   border: 1px solid var(--glass-border);
@@ -2405,6 +2413,7 @@ video.hero-hand { height: auto; object-fit: contain; }
 .industry-pick-slide video {
   width: 100%;
   height: 100%;
+  /* The frame is already the clip's shape, so this only guards an odd one. */
   object-fit: cover;
   display: block;
 }
@@ -2501,8 +2510,8 @@ video.hero-hand { height: auto; object-fit: contain; }
 
 /* On a tablet the film sits beside the words; it is small enough to. */
 @media (max-width: 819px) {
-  .industry-pick { grid-template-columns: minmax(0, 9rem) minmax(0, 1fr); align-items: center; }
-  .industry-pick-media { max-width: none; max-height: none; }
+  .industry-pick { grid-template-columns: auto minmax(0, 1fr); align-items: center; }
+  .industry-pick-media { height: 16rem; justify-self: start; }
   .industry-pick-note { display: none; }
 }
 
@@ -2519,11 +2528,11 @@ video.hero-hand { height: auto; object-fit: contain; }
 */
 @media (max-width: 559px) {
   .industry-pick {
-    grid-template-columns: minmax(0, 9.5rem) minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
     gap: 1rem;
     align-items: center;
   }
-  .industry-pick-media { max-width: none; max-height: none; margin-inline: 0; }
+  .industry-pick-media { height: 16.9rem; justify-self: start; max-width: 42vw; }
   .industry-pick-body { gap: 0.6rem; }
   .industry-pick-label { font-size: 0.625rem; letter-spacing: 0.1em; }
   .industry-pick-name { font-size: 1.0625rem; letter-spacing: -0.015em; }
@@ -2932,10 +2941,28 @@ video.hero-hand { height: auto; object-fit: contain; }
   transform: translateY(0.12em);
   transition: opacity 900ms var(--ease-out) 1s, transform 900ms var(--ease-out) 1s;
 }
+/*
+  A glow around the word itself. drop-shadow follows the shape of the letters,
+  where a box-shadow would only ring the line box — and the word is filled by a
+  clipped gradient, so this is the one way to light its actual edges. It
+  breathes rather than sits, on the same slow cycle the arrows use.
+*/
+.results-title[data-shown='true'] .results-word {
+  animation: sheen-drift 7s linear infinite, results-halo 4.5s ease-in-out infinite;
+}
+@keyframes results-halo {
+  0%, 100% { filter: drop-shadow(0 0 6px var(--gold-glow)) drop-shadow(0 0 20px transparent); }
+  50%      { filter: drop-shadow(0 0 12px var(--gold-glow)) drop-shadow(0 0 34px var(--gold-glow)); }
+}
 .results-title[data-shown='true'] .results-word { opacity: 1; transform: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .results-word { transition: none; opacity: 1; transform: none; }
+  /* Keep the halo, lose the pulse. */
+  .results-title[data-shown='true'] .results-word {
+    animation: none;
+    filter: drop-shadow(0 0 10px var(--gold-glow));
+  }
 }
 
 /* Display type gets the bigger halo; smaller headings a cheaper text-shadow. */

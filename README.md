@@ -576,12 +576,10 @@ name in bold — which changes with the film.
 industry and that clip's link. The card obeys it, and names whichever client owns that clip.
 Left empty, it picks on its own.
 
-Clips are delivered at exactly 720x1280 by *scaling* to that size rather than cropping to
-that shape. Several reels are stored anamorphically — a square frame flagged "show me as
-9:16" — and Cloudinary ignores that flag when cropping, which cut the sides off and zoomed
-in. Naming both dimensions is precisely the stretch the flag was asking for. **A reel that
-is genuinely square will be stretched by this**, so pin a different clip for that industry,
-or upload a 9:16 cut.
+**Every clip keeps its own shape and the player takes that shape** — a square cut gets a
+square player, a reel gets a tall one. Nothing is cropped and nothing is stretched, whatever
+the clip was cut as. The player's height stays put and only its width changes, so the page
+doesn't shift about as it cycles.
 
 No two industries show the same client. A client can sit in more than one industry, and the
 industry with the fewest clips to choose from picks first, so the one with only a single

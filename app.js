@@ -1461,21 +1461,23 @@ async function renderOurWork() {
     Everything here is markup only; mountIndustryPicker does the cycling.
   */
   /*
-    EVERY CLIP IS DELIVERED AT EXACTLY 720x1280, by SCALING to that size rather
-    than cropping to that shape.
+    EACH CLIP KEEPS ITS OWN SHAPE, and the frame takes that shape.
 
-    Several of these reels are stored anamorphically: a 1080x1080 raster with a
-    flag saying "show me as 9:16", so the picture inside is squeezed sideways
-    and the player is meant to stretch it back. Cloudinary ignores that flag,
-    whichever way the transformation is written — asking it to crop to 9:16
-    made it treat the squeezed square as if it were the real picture and cut
-    the sides off, which is the zoomed, wrong-shaped frame that kept showing.
+    Several reels are stored anamorphically: a 1080x1080 raster flagged "show
+    me as 9:16", so the picture inside is squeezed and the player is meant to
+    stretch it back. Cloudinary ignores that flag when it crops — tested with
+    the crop both before and after the transcode — so cropping to 9:16 cut the
+    sides off a squeezed square, which is the zoomed, wrong-shaped frame.
+    Forcing every clip to 9:16 instead fixed those but stretched the one reel
+    that is a genuine square.
 
-    Naming both dimensions sidesteps the flag entirely: 1080x1080 to 720x1280
-    is precisely the stretch the flag was asking for, and a reel that is
-    already 9:16 is simply resized. Checked against the source frame by frame.
+    Its IMAGE pipeline does honour the flag, though. So the poster is asked for
+    at no particular shape and arrives at the clip's true one — 9:16 for an
+    anamorphic reel, 1:1 for a square one — and mountIndustryPicker measures it,
+    shapes the frame to match and asks for the film at exactly that size.
+    Nothing is cropped, nothing is stretched, whatever shape it was cut.
   */
-  const PICK_CROP = 'c_scale,w_720,h_1280';
+  const PICK_POSTER = 'c_limit,w_720';
 
   /*
     One industry's work, and whose it is. A clip on Cloudinary plays inline,
@@ -1585,8 +1587,8 @@ async function renderOurWork() {
                ${index ? '' : 'data-on="true"'}>
             ${slide.moving
               ? `<video muted loop playsinline preload="none" aria-hidden="true"
-                        poster="${esc(cloudinaryStill(slide.ref, PICK_CROP))}"
-                        data-clip="${esc(cloudinaryVideo(slide.ref, PICK_CROP))}"></video>`
+                        poster="${esc(cloudinaryStill(slide.ref, PICK_POSTER))}"
+                        data-ref="${esc(slide.ref)}"></video>`
               : `<img src="${esc(videoPoster(slide.ref, 720))}" alt="" loading="lazy"
                        decoding="async" referrerpolicy="no-referrer">`}
           </div>`).join('')}
@@ -1941,12 +1943,49 @@ function mountIndustryPicker() {
     credit.append(strong);
   };
 
+  const frame = $('.industry-pick-media', card);
+
+  /*
+    What shape this clip really is. The poster is the honest witness: Cloudinary
+    delivers it at the clip's true proportions even when the film itself is
+    stored squeezed. Measured once per slide and remembered.
+  */
+  const learn = (slide) => {
+    if (slide.dataset.ar) return Promise.resolve(Number(slide.dataset.ar));
+    const shown = slide.querySelector('video, img');
+    const src = shown?.tagName === 'VIDEO' ? shown.poster : shown?.src;
+    if (!src) return Promise.resolve(0);
+    return new Promise((resolve) => {
+      const probe = new Image();
+      probe.onload = () => {
+        const ar = probe.naturalHeight ? probe.naturalWidth / probe.naturalHeight : 0;
+        if (ar) slide.dataset.ar = ar.toFixed(4);
+        resolve(ar);
+      };
+      probe.onerror = () => resolve(0);
+      probe.src = src;
+    });
+  };
+
+  /* The frame takes the shape of whatever is in it. */
+  const shape = (ar) => {
+    if (frame && ar) frame.style.setProperty('--pick-ar', ar.toFixed(4));
+  };
+
   /* A slide's clip is fetched the first time it is shown, not before. */
-  const play = (slide) => {
-    const clip = slide?.querySelector('video');
-    if (!clip || !onScreen) return;
-    if (!clip.src && clip.dataset.clip) {
-      clip.src = clip.dataset.clip;
+  const play = async (slide) => {
+    if (!slide || !onScreen) return;
+    const ar = await learn(slide);
+    if (slides[at] !== slide) return;          // moved on while the poster loaded
+    shape(ar);
+
+    const clip = slide.querySelector('video');
+    if (!clip) return;
+    if (!clip.src && clip.dataset.ref && ar) {
+      // Named in both dimensions, which is the only way past the ignored flag.
+      // Even numbers: H.264 will not encode an odd one.
+      const height = Math.round(720 / ar / 2) * 2;
+      clip.src = cloudinaryVideo(clip.dataset.ref, `c_scale,w_720,h_${height}`);
       clip.preload = 'auto';
     }
     clip.play().catch(() => {});
