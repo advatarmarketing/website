@@ -1447,6 +1447,71 @@ async function renderOurWork() {
     ? `<ul class="client-table">${group.map(clientTableRow(scope)).join('')}</ul>`
     : `<p class="tiny client-table-empty">${emptyLine}</p>`;
 
+  /*
+    "What's your industry?" — a reel from one industry at a time, cycling at
+    random, with the industry's name as a menu you can open to choose your own.
+
+    WHAT EACH INDUSTRY SHOWS. Its clients' reels, preferring one that lives on
+    Cloudinary: those play inline, muted and looping, which is the point of the
+    thing. A Drive reel cannot play inline without the whole Drive player
+    around it, so an industry that only has those shows its first frame as a
+    still instead — a quieter card rather than a broken one. An industry with
+    no reels at all is left out, since there would be nothing to show.
+
+    Everything here is markup only; mountIndustryPicker does the cycling.
+  */
+  const pickerSlides = industries
+    .map(([name, group]) => {
+      const reels = industryReels(name, group).map((row) => row.video).filter(Boolean);
+      const moving = reels.find((ref) => isCloudinaryVideo(ref));
+      const ref = moving ?? reels[0];
+      return ref ? { name, ref, moving: Boolean(moving) } : null;
+    })
+    .filter(Boolean);
+
+  const industryPicker = pickerSlides.length < 2 ? '' : `
+    <div class="industry-pick" data-reveal data-industry-pick>
+      <div class="industry-pick-media">
+        ${pickerSlides.map((slide, index) => `
+          <div class="industry-pick-slide" data-slide="${index}" ${index ? '' : 'data-on="true"'}>
+            ${slide.moving
+              ? `<video muted loop playsinline preload="none" aria-hidden="true"
+                        poster="${esc(cloudinaryPoster(slide.ref, 720))}"
+                        data-clip="${esc(cloudinaryVideo(slide.ref, 'c_limit,w_720'))}"></video>`
+              : `<img src="${esc(videoPoster(slide.ref, 720))}" alt="" loading="lazy"
+                       decoding="async" referrerpolicy="no-referrer">`}
+          </div>`).join('')}
+      </div>
+
+      <div class="industry-pick-body">
+        <p class="industry-pick-label micro" data-copy="work.pick.label">What's your industry?</p>
+
+        <div class="industry-pick-choose">
+          ${/*
+              The name you can see is ours; the <select> is a transparent sheet
+              laid over it. A bare <select> is as wide as its longest option,
+              so the rule under "Education" would have run the width of
+              "Community & Islamic Organisations" — and this way the browser's
+              own menu still opens, which on a phone is the right menu.
+            */''}
+          <span class="industry-pick-select">
+            <span class="industry-pick-name" data-pick-name>${esc(pickerSlides[0].name)}</span>
+            ${icon('chevronDown')}
+            <select class="industry-pick-native" data-pick-industry aria-label="Choose an industry">
+              ${pickerSlides.map((slide, index) =>
+                `<option value="${index}">${esc(slide.name)}</option>`).join('')}
+            </select>
+          </span>
+
+          <button type="button" class="btn btn--ember industry-pick-go" data-pick-go>
+            <span data-copy="work.pick.cta">See more</span>${icon('arrowRight')}
+          </button>
+        </div>
+
+        <p class="industry-pick-note tiny" data-copy="work.pick.note">We'll take you straight to that work.</p>
+      </div>
+    </div>`;
+
   const industryPanel = ([name, group], index) => {
     const reels = industryReels(name, group);
     return `
@@ -1544,8 +1609,16 @@ async function renderOurWork() {
     <section class="section" id="results">
       <div class="shell">
         <div class="glow" style="--glow-w:34rem;--glow-h:26rem;--glow-a:0.28;left:-10rem;top:-6rem"></div>
-        <h2 class="display display--lg" data-reveal data-copy="work.results.title"
-            style="margin-bottom:calc(clamp(1.75rem,4vw,2.75rem) - 0.16em)">Our Drive? Results.</h2>
+        ${/*
+            The page's opening line, at hero scale rather than section scale.
+            "Results." is its own element so it can arrive a beat after the
+            question and carry the gold sheen — the word the whole page is
+            about, said last.
+          */''}
+        <h2 class="display display--xl results-title" data-reveal>
+          <span data-copy="work.results.title">Our Drive?</span>
+          <span class="glow-word results-word" data-copy="work.results.word">Results.</span>
+        </h2>
         <div class="results-row" data-reveal>${resultsRow}</div>
         <div style="margin-top:1.5rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center">
           <button type="button" class="link-arrow" data-results-modal><span data-copy="work.results.more">See more</span>${icon('arrowRight')}</button>
@@ -1576,6 +1649,8 @@ async function renderOurWork() {
                </div>
              </div>`
           : emptyState('No featured reels yet', 'Mark clients as featured in edit mode to show them here.')}
+
+        ${industryPicker}
 
         <!-- Both ways into the client work, side by side. -->
         <div class="work-actions" data-reveal>
@@ -1699,9 +1774,128 @@ async function renderOurWork() {
   </main>`;
 }
 
+/*
+  The "What's your industry?" card: which reel is showing, and what happens
+  when somebody chooses.
+
+  IT STOPS CYCLING THE MOMENT YOU TOUCH IT. A menu that keeps changing under
+  the hand is a menu you cannot use — so the first time the select is opened or
+  changed, the rotation ends for good and the card belongs to the reader.
+
+  It also only cycles while it is on screen. Off screen there is nobody to see
+  it, and a video decoding in a part of the page nobody is looking at is a
+  warm phone for nothing.
+*/
+function mountIndustryPicker() {
+  const card = $('[data-industry-pick]');
+  if (!card) return;
+
+  const slides = $$('.industry-pick-slide', card);
+  const select = $('[data-pick-industry]', card);
+  if (slides.length < 2 || !select) return;
+
+  let at = 0;
+  let taken = false;                 // somebody has chosen; stop cycling
+  let onScreen = false;
+  let timer = 0;
+
+  const name = $('[data-pick-name]', card);
+
+  const show = (next) => {
+    if (next === at) return;
+    slides[at]?.removeAttribute('data-on');
+    slides[at]?.querySelector('video')?.pause();
+    at = next;
+    slides[at].dataset.on = 'true';
+    select.value = String(at);
+    if (name) {
+      name.textContent = select.options[at]?.textContent ?? '';
+      // Re-run the fade on the word so the name arrives with the film.
+      name.dataset.swap = 'true';
+      requestAnimationFrame(() => { delete name.dataset.swap; });
+    }
+    play(slides[at]);
+  };
+
+  /* A slide's clip is fetched the first time it is shown, not before. */
+  const play = (slide) => {
+    const clip = slide?.querySelector('video');
+    if (!clip || !onScreen) return;
+    if (!clip.src && clip.dataset.clip) {
+      clip.src = clip.dataset.clip;
+      clip.preload = 'auto';
+    }
+    clip.play().catch(() => {});
+  };
+
+  const ROTATE = 5200;               // long enough to take a slide in
+  const tick = () => {
+    if (taken || !onScreen) return;
+    /* A different one each time: never the one already up. */
+    let next = at;
+    while (next === at) next = Math.floor(Math.random() * slides.length);
+    show(next);
+  };
+  const start = () => { if (!timer && !taken) timer = setInterval(tick, ROTATE); };
+  const stop = () => { clearInterval(timer); timer = 0; };
+
+  const settle = () => {
+    taken = true;
+    stop();
+  };
+  select.addEventListener('pointerdown', settle);
+  select.addEventListener('focus', settle);
+  select.addEventListener('change', () => {
+    settle();
+    show(Number(select.value));
+  });
+
+  $('[data-pick-go]', card)?.addEventListener('click', () => {
+    settle();
+    openIndustry(select.options[at]?.textContent ?? '');
+  });
+
+  if ('IntersectionObserver' in window) {
+    const watcher = new IntersectionObserver(([entry]) => {
+      onScreen = entry.isIntersecting;
+      if (onScreen) { play(slides[at]); start(); } else { stop(); slides[at]?.querySelector('video')?.pause(); }
+    }, { rootMargin: '10% 0px' });
+    watcher.observe(card);
+    registerCleanup(() => { watcher.disconnect(); stop(); });
+  } else {
+    onScreen = true;
+    play(slides[at]);
+    start();
+    registerCleanup(stop);
+  }
+}
+
+/**
+ * Opens the industry view at one industry and takes the reader to it — the
+ * same place "See more by industry" leads, but straight to the trade they
+ * picked rather than the top of the list.
+ */
+function openIndustry(name) {
+  if (!name) return;
+  const byIndustry = $('[data-toggle="industries"]');
+  const panel = document.getElementById(`industry-${name}`);
+  if (!byIndustry || !panel) return;
+
+  // Open the industry view if it is closed; its own handler does the rest.
+  if (byIndustry.getAttribute('aria-expanded') !== 'true') byIndustry.click();
+
+  const head = $(`[aria-controls="${CSS.escape(`industry-${name}`)}"]`);
+  requestAnimationFrame(() => {
+    if (head && head.getAttribute('aria-expanded') !== 'true') head.click();
+    // After the panels have laid out, so the target lands where it should.
+    setTimeout(() => scrollToTarget(head ?? panel, { offset: -110 }), 120);
+  });
+}
+
 function mountOurWork() {
   $('[data-results-modal]')?.addEventListener('click', openCaseStudies);
   mountCarousel($('.carousel--reels'));
+  mountIndustryPicker();
 
   /*
     Delegated, because the photographs are inside panels that are built before
@@ -2260,15 +2454,22 @@ function mountLookInside() {
   /*
     EACH STEP SWELLS AS YOU REACH IT AND SETTLES BACK AS YOU LEAVE.
 
-    How close a step is to being read is how far its middle is from the reading
-    line, as a fraction of two-thirds of the screen — a shorter reach than the
-    distance between steps, so each one is down to its smallest before the next
-    starts to grow, rather than the two meeting somewhere in the middle.
+    A STEP HOLDS ITS SIZE WHILE YOU ARE ON IT, then lets go.
 
-    Smoothed, so it eases in and out rather than tracking the scroll in a
-    straight line, and written out as --zoom for the CSS to scale by. One step
-    is swelling while the one before it is settling, which is what makes the
-    page feel like it is moving through them rather than past them.
+    The size used to peak at a single point — the instant the step's middle
+    crossed the reading line — so it began shrinking the moment you moved a
+    pixel past it, and the step you were still reading was already on its way
+    out. Now there are two zones:
+
+      HOLD   within a fifth of a screen either side of the reading line, the
+             step is at full size and stays there. That is about 350px of
+             scrolling, a second or so, where nothing changes — this is the
+             part that reads as being "on" a step.
+      FADE   beyond that it falls away over another two-fifths of a screen,
+             reaching its smallest well before the next step's hold begins.
+
+    Smoothed over the fade, so it eases out rather than tracking the scroll in
+    a straight line, and written out as --zoom for the CSS to scale by.
 
     Where the system asks for less movement, nothing is written and every step
     stays at its own size.
@@ -2295,6 +2496,8 @@ function mountLookInside() {
     const rect = process.getBoundingClientRect();
     const view = window.innerHeight;
     const reading = view * 0.55;
+    const HOLD = view * 0.20;                              // full size either side of the line
+    const FADE = view * 0.40;                              // and the fall-off beyond it
     const fill = Math.min(Math.max(reading - rect.top, 0), rect.height);
     process.style.setProperty('--fill', `${fill.toFixed(1)}px`);
 
@@ -2307,8 +2510,8 @@ function mountLookInside() {
 
       if (!zoomy) return;
       const box = step.getBoundingClientRect();
-      const away = Math.abs(box.top + box.height / 2 - reading) / (view * 0.66);
-      const near = Math.max(0, 1 - Math.min(1, away));
+      const away = Math.abs(box.top + box.height / 2 - reading);
+      const near = away <= HOLD ? 1 : Math.max(0, 1 - (away - HOLD) / FADE);
       const eased = near * near * (3 - 2 * near);          // smoothstep
       step.style.setProperty('--zoom', (ZOOM_MIN + (ZOOM_MAX - ZOOM_MIN) * eased).toFixed(4));
     });

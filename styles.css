@@ -2352,6 +2352,168 @@ video.hero-hand { height: auto; object-fit: contain; }
   .process-media { margin-top: 1.25rem; }
 }
 
+/* ============================================ What's your industry? ====== */
+
+/*
+  A reel from one industry beside a menu of the rest. Two columns on a wide
+  screen — the film on the left at a reel's own shape, the question and the
+  controls on the right, set in from it — and stacked on a phone.
+
+  It is given its own band inside the section: a hairline above it and real
+  room either side, so it reads as a separate invitation rather than another
+  row of the reel carousel it sits under.
+*/
+.industry-pick {
+  margin-top: clamp(3rem, 7vw, 5.5rem);
+  padding-top: clamp(2.5rem, 6vw, 4.5rem);
+  border-top: 1px solid var(--hairline);
+  display: grid;
+  gap: clamp(1.75rem, 5vw, 3.5rem);
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 820px) {
+  .industry-pick { grid-template-columns: minmax(0, 15rem) minmax(0, 1fr); }
+}
+
+/*
+  The film. Every reel is shown at a reel's shape, so the card never changes
+  height as the industry changes — a box that jumped between shapes every few
+  seconds would drag the whole page about under the reader.
+*/
+.industry-pick-media {
+  position: relative;
+  aspect-ratio: 9 / 16;
+  max-height: 24rem;
+  margin-inline: auto;
+  width: 100%;
+  max-width: 15rem;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-card);
+}
+.industry-pick-slide {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 900ms var(--ease);
+}
+.industry-pick-slide[data-on='true'] { opacity: 1; }
+.industry-pick-slide img,
+.industry-pick-slide video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.industry-pick-body { display: grid; gap: 1.1rem; justify-items: start; }
+.industry-pick-label {
+  margin: 0;
+  color: var(--text-faint);
+}
+
+/*
+  The menu and the way in, on one line. They wrap onto two on a narrow screen
+  rather than squeezing, because a 44px target that has been squeezed is no
+  longer a 44px target.
+*/
+.industry-pick-choose {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/*
+  The industry's name IS the menu: display type, the size of a subheading, with
+  only the chevron to say it opens. A boxed form control here would read as a
+  filter on a search page rather than as the headline of the card.
+*/
+.industry-pick-select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--btn-outline);
+  cursor: pointer;
+  transition: border-color var(--mid) var(--ease);
+}
+.industry-pick-name {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: clamp(1.5rem, 3.4vw, 2.5rem);
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  color: var(--text-hi);
+  transition: opacity 420ms var(--ease), color var(--mid) var(--ease);
+}
+/* Set for one frame as the name changes, so it fades in with its film. */
+.industry-pick-name[data-swap] { opacity: 0; transition: none; }
+.industry-pick-select .icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--gold-text);
+  transition: transform var(--mid) var(--ease);
+}
+.industry-pick-select:hover { border-bottom-color: var(--gold-text); }
+.industry-pick-select:hover .industry-pick-name { color: var(--gold-text); }
+.industry-pick-select:hover .icon { transform: translateY(2px); }
+
+/*
+  The real control, laid over the name and invisible. It keeps every keyboard
+  and touch behaviour a <select> has — and on a phone that means the system's
+  own picker — while the name above it is ours to style and to fade.
+*/
+.industry-pick-native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+.industry-pick-native:focus-visible + .industry-pick-name,
+.industry-pick-select:has(.industry-pick-native:focus-visible) { outline: none; }
+.industry-pick-select:has(.industry-pick-native:focus-visible) {
+  border-bottom-color: var(--gold-text);
+  outline: 2px solid color-mix(in srgb, var(--gold-text) 55%, transparent);
+  outline-offset: 6px;
+  border-radius: 2px;
+}
+
+.industry-pick-note { margin: 0; color: var(--text-faint); }
+
+/* On a tablet the film sits beside the words; it is small enough to. */
+@media (max-width: 819px) {
+  .industry-pick { grid-template-columns: minmax(0, 9rem) minmax(0, 1fr); align-items: center; }
+  .industry-pick-media { max-width: none; max-height: none; }
+  .industry-pick-note { display: none; }
+}
+
+/*
+  On a phone it stacks. Squeezed into a column beside the film, an industry
+  like "Community & Islamic Organisations" broke over three lines and the
+  whole card went tall and thin; across the full width it takes two.
+*/
+@media (max-width: 559px) {
+  .industry-pick {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+    justify-items: start;
+  }
+  .industry-pick-media { width: 9.5rem; margin-inline: 0; }
+  .industry-pick-choose { width: 100%; }
+  .industry-pick-select { width: 100%; justify-content: space-between; }
+}
+
 /* =========================================================== Hiring ====== */
 
 .bts-strip {
@@ -2721,6 +2883,39 @@ video.hero-hand { height: auto; object-fit: contain; }
   */
   padding-bottom: 0.16em;
   margin-bottom: -0.16em;
+}
+
+/*
+  "Our Drive? Results." — the first line of Our Work, at hero scale.
+
+  The gap to the next section is unchanged: the heading simply takes more room
+  than it did, so everything below it moves down rather than closing up.
+
+  "Results." waits a beat. The reveal brings the question in, and the word
+  follows a second later with the gold sheen already running on it, so it reads
+  as an answer rather than as the rest of the same line. Its own transition —
+  not the reveal's — because the reveal fires once as the heading arrives and
+  this needs its own, later, timing.
+*/
+.results-title {
+  /*
+    Scaled to the type. .display carries a 0.16em overhang under it so
+    descenders aren't clipped by the gradient fill, and at this size that eats
+    15px of whatever is set here — so the room under the line is set generously
+    and the overhang taken off it.
+  */
+  margin-bottom: calc(clamp(2.75rem, 5.5vw, 5rem) - 0.16em);
+  max-width: 18ch;
+}
+.results-word {
+  opacity: 0;
+  transform: translateY(0.12em);
+  transition: opacity 900ms var(--ease-out) 1s, transform 900ms var(--ease-out) 1s;
+}
+.results-title[data-shown='true'] .results-word { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .results-word { transition: none; opacity: 1; transform: none; }
 }
 
 /* Display type gets the bigger halo; smaller headings a cheaper text-shadow. */

@@ -140,6 +140,12 @@ roughly 700 pixels of scrolling between one and the next — three times what it
 timeline can no longer be flicked past in one go. Nothing holds the scroll back; the page
 simply has further to travel, so it still answers the wheel like every other page.
 
+**A step holds its size while you are on it.** For about 350 pixels of scrolling — a second
+or so either side of the middle of the screen — the step stays at full size and nothing
+changes. Only past that does it ease down, well before the next one starts to grow. It used
+to shrink the instant you moved a pixel, so the step you were still reading was already on
+its way out.
+
 **A clip on a step waits for you.** It downloads about half a screen before you reach it, so
 it is ready, but it does not start until the step is properly on screen — and it pauses again
 once you have scrolled past, picking up where it left off if you come back.
@@ -551,6 +557,23 @@ and stays stopped until you scroll away from it and back: resuming after a coupl
 seconds meant the reel you had just pressed play on slid off the side while you watched it,
 and on a phone a finger lands on these rows constantly, since they sit right in the path of
 scrolling down the page.
+
+### What's your industry?
+
+Under the reels on Our Work there is a card that shows one industry's work at a time: a reel
+playing silently on a loop, with the industry's name beside it. It changes every few seconds,
+at random, and never repeats the one already up.
+
+The name is also a menu. Open it, pick a trade, and the card settles on it and stops changing
+— a menu that keeps moving under your hand is a menu you cannot use. **See more** then opens
+the industry view at that trade and takes you to it, which is the same place *See more by
+industry* leads, only straight to the one you chose.
+
+There is nothing to set up. It builds itself from the clients you already have: an industry's
+reel is one of its clients' reels, preferring one hosted on Cloudinary because those play
+inline. An industry whose reels are all on Google Drive shows the first frame as a still
+instead, since a Drive video needs Drive's own player around it. An industry with no reels at
+all is left out.
 
 ### Our Work reels
 
