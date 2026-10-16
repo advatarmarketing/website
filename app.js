@@ -1461,17 +1461,21 @@ async function renderOurWork() {
     Everything here is markup only; mountIndustryPicker does the cycling.
   */
   /*
-    EVERY CLIP IS DELIVERED AT 9:16, cropped by Cloudinary rather than by the
-    box it sits in. Reels arrive at whatever shape they were cut — one of these
-    is a 720x720 square — and a square shown in a tall frame has to be blown up
-    and trimmed to fill it, which is what made the picture look stretched.
-    Asking for the crop up front means what arrives already fits.
+    EVERY CLIP IS DELIVERED AT EXACTLY 720x1280, by SCALING to that size rather
+    than cropping to that shape.
 
-    (g_auto would pick the subject rather than the middle, but Cloudinary
-    refuses it on video on this account — it answers 423 — so this is a centre
-    crop, which is where a reel's subject sits anyway.)
+    Several of these reels are stored anamorphically: a 1080x1080 raster with a
+    flag saying "show me as 9:16", so the picture inside is squeezed sideways
+    and the player is meant to stretch it back. Cloudinary ignores that flag,
+    whichever way the transformation is written — asking it to crop to 9:16
+    made it treat the squeezed square as if it were the real picture and cut
+    the sides off, which is the zoomed, wrong-shaped frame that kept showing.
+
+    Naming both dimensions sidesteps the flag entirely: 1080x1080 to 720x1280
+    is precisely the stretch the flag was asking for, and a reel that is
+    already 9:16 is simply resized. Checked against the source frame by frame.
   */
-  const PICK_CROP = 'c_fill,ar_9:16,w_720';
+  const PICK_CROP = 'c_scale,w_720,h_1280';
 
   /*
     One industry's work, and whose it is. A clip on Cloudinary plays inline,
@@ -1493,10 +1497,19 @@ async function renderOurWork() {
     one cannot without Drive's whole player around it, so an industry that only
     has those shows its first frame as a still.
   */
-  const reelsOf = ([, group]) => group.flatMap((client) => [client.selectedReel, ...(client.videos ?? [])
-    .map((video) => video.driveFileId)]
-    .filter(Boolean)
-    .map((ref) => ({ ref, client: client.name })));
+  /*
+    An industry's own clients come first — the ones whose Industry is this one,
+    ahead of those merely also filed here — and within that, the order set in
+    edit mode. So which client fronts an industry is something you control from
+    Order, notes & tags rather than an accident of the list.
+  */
+  const reelsOf = ([name, group]) => [...group]
+    .sort((a, b) => Number(b.category === name) - Number(a.category === name)
+      || (a.order ?? 999) - (b.order ?? 999))
+    .flatMap((client) => [client.selectedReel, ...(client.videos ?? [])
+      .map((video) => video.driveFileId)]
+      .filter(Boolean)
+      .map((ref) => ({ ref, client: client.name })));
 
   /*
     THE SCARCEST INDUSTRY CHOOSES FIRST. Taken in display order, the first
@@ -1507,6 +1520,25 @@ async function renderOurWork() {
     an industry has gives the cornered one its only option and leaves the
     others to pick around it.
   */
+  /*
+    A reel named under "Industry reels" in edit mode wins outright. That is the
+    existing way to say which work fronts an industry, so the card obeys it
+    rather than inventing a second one: set a row there and this card shows it.
+    Whose it is comes from matching the link back to the client who owns it.
+  */
+  const ownerOf = new Map();
+  for (const client of clients) {
+    for (const ref of [client.selectedReel, ...(client.videos ?? []).map((v) => v.driveFileId)]) {
+      if (ref && !ownerOf.has(ref)) ownerOf.set(ref, client.name);
+    }
+  }
+  const pinned = new Map();
+  for (const row of state.settings?.industryReels ?? []) {
+    if (row?.video && row?.industry && !pinned.has(row.industry.toLowerCase())) {
+      pinned.set(row.industry.toLowerCase(), row.video);
+    }
+  }
+
   const order = industries
     .map((entry, index) => ({ entry, index, room: new Set(reelsOf(entry)
       .filter((row) => isCloudinaryVideo(row.ref)).map((row) => row.client)).size }))
@@ -1526,7 +1558,11 @@ async function renderOurWork() {
       is not. Only then does it repeat, and only then does it fall back to a
       Drive still, which cannot play inline.
     */
-    const pick = plays.find((row) => !usedClients.has(row.client) && !usedRefs.has(row.ref))
+    const chosenRef = pinned.get(name.toLowerCase());
+    const pick = (chosenRef
+        ? { ref: chosenRef, client: ownerOf.get(chosenRef) ?? '' }
+        : null)
+      ?? plays.find((row) => !usedClients.has(row.client) && !usedRefs.has(row.ref))
       ?? plays.find((row) => !usedRefs.has(row.ref))
       ?? plays[0]
       ?? owned.find((row) => !usedClients.has(row.client))
