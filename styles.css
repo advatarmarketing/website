@@ -2490,6 +2490,13 @@ video.hero-hand { height: auto; object-fit: contain; }
 }
 
 .industry-pick-note { margin: 0; color: var(--text-faint); }
+/* Whose work is playing. Set from the slide, so it changes with the film. */
+.industry-pick-credit {
+  margin: 0;
+  color: var(--text-lo);
+  letter-spacing: 0.02em;
+}
+.industry-pick-credit:empty { display: none; }
 
 /* On a tablet the film sits beside the words; it is small enough to. */
 @media (max-width: 819px) {
@@ -2499,19 +2506,22 @@ video.hero-hand { height: auto; object-fit: contain; }
 }
 
 /*
-  On a phone it stacks. Squeezed into a column beside the film, an industry
-  like "Community & Islamic Organisations" broke over three lines and the
-  whole card went tall and thin; across the full width it takes two.
+  On a phone the words stay beside the film rather than under it. The film is
+  given a narrow column and the name is allowed to wrap, which costs a line or
+  two on the longest industries but keeps the card to a readable height.
 */
 @media (max-width: 559px) {
   .industry-pick {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 1.5rem;
-    justify-items: start;
+    grid-template-columns: minmax(0, 7.5rem) minmax(0, 1fr);
+    gap: 1.1rem;
+    align-items: center;
   }
-  .industry-pick-media { width: 9.5rem; margin-inline: 0; }
-  .industry-pick-choose { width: 100%; }
+  .industry-pick-media { max-width: none; max-height: none; margin-inline: 0; }
+  .industry-pick-body { gap: 0.8rem; }
+  .industry-pick-name { font-size: clamp(1.25rem, 6vw, 1.6rem); }
   .industry-pick-select { width: 100%; justify-content: space-between; }
+  .industry-pick-choose { width: 100%; }
+  .industry-pick-go { width: 100%; justify-content: center; }
 }
 
 /* =========================================================== Hiring ====== */

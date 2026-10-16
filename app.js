@@ -1460,12 +1460,35 @@ async function renderOurWork() {
 
     Everything here is markup only; mountIndustryPicker does the cycling.
   */
+  /*
+    EVERY CLIP IS DELIVERED AT 9:16, cropped by Cloudinary rather than by the
+    box it sits in. Reels arrive at whatever shape they were cut — one of these
+    is a 720x720 square — and a square shown in a tall frame has to be blown up
+    and trimmed to fill it, which is what made the picture look stretched.
+    Asking for the crop up front means what arrives already fits.
+
+    (g_auto would pick the subject rather than the middle, but Cloudinary
+    refuses it on video on this account — it answers 423 — so this is a centre
+    crop, which is where a reel's subject sits anyway.)
+  */
+  const PICK_CROP = 'c_fill,ar_9:16,w_720';
+
+  /*
+    One industry's work, and whose it is. A clip on Cloudinary plays inline,
+    which is the point of the card; a Drive one cannot without Drive's whole
+    player around it, so an industry that only has those shows its first frame
+    as a still. Preferring a Cloudinary reel means most industries move.
+  */
   const pickerSlides = industries
     .map(([name, group]) => {
-      const reels = industryReels(name, group).map((row) => row.video).filter(Boolean);
-      const moving = reels.find((ref) => isCloudinaryVideo(ref));
-      const ref = moving ?? reels[0];
-      return ref ? { name, ref, moving: Boolean(moving) } : null;
+      const owned = group.flatMap((client) => [client.selectedReel, ...(client.videos ?? [])
+        .map((video) => video.driveFileId)]
+        .filter(Boolean)
+        .map((ref) => ({ ref, client: client.name })));
+      const chosen = owned.find((row) => isCloudinaryVideo(row.ref)) ?? owned[0];
+      return chosen
+        ? { name, ref: chosen.ref, client: chosen.client, moving: isCloudinaryVideo(chosen.ref) }
+        : null;
     })
     .filter(Boolean);
 
@@ -1473,11 +1496,13 @@ async function renderOurWork() {
     <div class="industry-pick" data-reveal data-industry-pick>
       <div class="industry-pick-media">
         ${pickerSlides.map((slide, index) => `
-          <div class="industry-pick-slide" data-slide="${index}" ${index ? '' : 'data-on="true"'}>
+          <div class="industry-pick-slide" data-slide="${index}"
+               data-client="${esc(slide.client)}" data-plays="${slide.moving}"
+               ${index ? '' : 'data-on="true"'}>
             ${slide.moving
               ? `<video muted loop playsinline preload="none" aria-hidden="true"
-                        poster="${esc(cloudinaryPoster(slide.ref, 720))}"
-                        data-clip="${esc(cloudinaryVideo(slide.ref, 'c_limit,w_720'))}"></video>`
+                        poster="${esc(cloudinaryStill(slide.ref, PICK_CROP))}"
+                        data-clip="${esc(cloudinaryVideo(slide.ref, PICK_CROP))}"></video>`
               : `<img src="${esc(videoPoster(slide.ref, 720))}" alt="" loading="lazy"
                        decoding="async" referrerpolicy="no-referrer">`}
           </div>`).join('')}
@@ -1509,6 +1534,7 @@ async function renderOurWork() {
         </div>
 
         <p class="industry-pick-note tiny" data-copy="work.pick.note">We'll take you straight to that work.</p>
+        <p class="industry-pick-credit tiny" data-pick-credit></p>
       </div>
     </div>`;
 
@@ -1800,6 +1826,7 @@ function mountIndustryPicker() {
   let timer = 0;
 
   const name = $('[data-pick-name]', card);
+  const credit = $('[data-pick-credit]', card);
 
   const show = (next) => {
     if (next === at) return;
@@ -1814,7 +1841,15 @@ function mountIndustryPicker() {
       name.dataset.swap = 'true';
       requestAnimationFrame(() => { delete name.dataset.swap; });
     }
+    setCredit();
     play(slides[at]);
+  };
+
+  /* Whose work is on screen. */
+  const setCredit = () => {
+    if (!credit) return;
+    const who = slides[at]?.dataset.client ?? '';
+    credit.textContent = who ? `Selected content made for ${who}` : '';
   };
 
   /* A slide's clip is fetched the first time it is shown, not before. */
@@ -1829,12 +1864,45 @@ function mountIndustryPicker() {
   };
 
   const ROTATE = 5200;               // long enough to take a slide in
+
+  /*
+    A SHUFFLED QUEUE, NOT A COIN TOSS. Picking at random each time meant the
+    same industry could come round twice in three turns while another went
+    unseen for a minute. The order is shuffled once, walked to the end, then
+    shuffled again — so every industry is shown before any is repeated.
+
+    Only the ones that actually play take part: an industry whose reels all
+    live on Drive would stop the card dead on a still for five seconds. It is
+    still in the menu, so it can be chosen; it just isn't dealt into the
+    rotation. With none that play, the card simply doesn't cycle.
+  */
+  const inPlay = slides
+    .map((slide, index) => (slide.dataset.plays === 'true' ? index : -1))
+    .filter((index) => index >= 0);
+
+  let queue = [];
+  const refill = () => {
+    /*
+      Every playable industry goes into each round — none held back. Dropping
+      the one on screen from the round, which is the obvious way to avoid a
+      repeat, quietly skipped it for that whole round: with six industries
+      only five were ever dealt, and one of them was never seen at all.
+      Instead the round is complete, and if it happens to open on the one
+      already showing, that one is moved back a place.
+    */
+    queue = [...inPlay];
+    for (let i = queue.length - 1; i > 0; i -= 1) {       // Fisher-Yates
+      const j = Math.floor(Math.random() * (i + 1));
+      [queue[i], queue[j]] = [queue[j], queue[i]];
+    }
+    if (queue.length > 1 && queue[0] === at) [queue[0], queue[1]] = [queue[1], queue[0]];
+  };
+
   const tick = () => {
-    if (taken || !onScreen) return;
-    /* A different one each time: never the one already up. */
-    let next = at;
-    while (next === at) next = Math.floor(Math.random() * slides.length);
-    show(next);
+    if (taken || !onScreen || inPlay.length < 2) return;
+    if (!queue.length) refill();
+    const next = queue.shift();
+    if (next !== undefined) show(next);
   };
   const start = () => { if (!timer && !taken) timer = setInterval(tick, ROTATE); };
   const stop = () => { clearInterval(timer); timer = 0; };
@@ -1854,6 +1922,10 @@ function mountIndustryPicker() {
     settle();
     openIndustry(select.options[at]?.textContent ?? '');
   });
+
+  /* Open on an industry that moves, so the card is alive the moment it is seen. */
+  if (inPlay.length && !inPlay.includes(at)) show(inPlay[0]);
+  setCredit();
 
   if ('IntersectionObserver' in window) {
     const watcher = new IntersectionObserver(([entry]) => {

@@ -569,11 +569,22 @@ The name is also a menu. Open it, pick a trade, and the card settles on it and s
 the industry view at that trade and takes you to it, which is the same place *See more by
 industry* leads, only straight to the one you chose.
 
+Under the name it says whose work is playing — **Selected content made for …** — which
+changes with the film.
+
 There is nothing to set up. It builds itself from the clients you already have: an industry's
 reel is one of its clients' reels, preferring one hosted on Cloudinary because those play
-inline. An industry whose reels are all on Google Drive shows the first frame as a still
-instead, since a Drive video needs Drive's own player around it. An industry with no reels at
-all is left out.
+inline. Every clip is delivered already cropped to a reel's shape, so a square upload is not
+blown up to fill a tall frame.
+
+**An industry whose reels are all on Google Drive cannot play**, because a Drive video needs
+Drive's own player around it. Those show the first frame as a still and are left out of the
+cycling, though you can still pick them from the menu. To make one move, upload one of that
+client's reels to Cloudinary and paste that link in. An industry with no reels at all is left
+out entirely.
+
+The cycling deals a shuffled round of every playable industry, plays it to the end, then
+shuffles again — so each one is shown before any is repeated, and never twice in a row.
 
 ### Our Work reels
 
