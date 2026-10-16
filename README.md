@@ -569,8 +569,12 @@ The name is also a menu. Open it, pick a trade, and the card settles on it and s
 the industry view at that trade and takes you to it, which is the same place *See more by
 industry* leads, only straight to the one you chose.
 
-Under the name it says whose work is playing — **Selected content made for …** — which
-changes with the film.
+Under the name it says whose work is playing — **Selected content made for …**, the client's
+name in bold — which changes with the film.
+
+No two industries show the same client. A client can sit in more than one industry, and the
+industry with the fewest clips to choose from picks first, so the one with only a single
+option gets it and the rest pick around it.
 
 There is nothing to set up. It builds itself from the clients you already have: an industry's
 reel is one of its clients' reels, preferring one hosted on Cloudinary because those play

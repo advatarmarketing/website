@@ -1479,18 +1479,66 @@ async function renderOurWork() {
     player around it, so an industry that only has those shows its first frame
     as a still. Preferring a Cloudinary reel means most industries move.
   */
-  const pickerSlides = industries
-    .map(([name, group]) => {
-      const owned = group.flatMap((client) => [client.selectedReel, ...(client.videos ?? [])
-        .map((video) => video.driveFileId)]
-        .filter(Boolean)
-        .map((ref) => ({ ref, client: client.name })));
-      const chosen = owned.find((row) => isCloudinaryVideo(row.ref)) ?? owned[0];
-      return chosen
-        ? { name, ref: chosen.ref, client: chosen.client, moving: isCloudinaryVideo(chosen.ref) }
-        : null;
-    })
-    .filter(Boolean);
+  /*
+    One industry's work, and whose it is.
+
+    NO TWO INDUSTRIES SHOW THE SAME THING. A client can belong to more than one
+    industry — TawusLifts is both a personal brand and a fitness client — and
+    picking "the first reel that plays" gave two industries the identical film.
+    So each industry takes the first reel whose CLIENT no other industry has
+    taken; failing that, one whose video at least hasn't been used; and only if
+    there is nothing else does it repeat.
+
+    A clip on Cloudinary plays inline, which is the point of the card; a Drive
+    one cannot without Drive's whole player around it, so an industry that only
+    has those shows its first frame as a still.
+  */
+  const reelsOf = ([, group]) => group.flatMap((client) => [client.selectedReel, ...(client.videos ?? [])
+    .map((video) => video.driveFileId)]
+    .filter(Boolean)
+    .map((ref) => ({ ref, client: client.name })));
+
+  /*
+    THE SCARCEST INDUSTRY CHOOSES FIRST. Taken in display order, the first
+    industry helped itself to whichever client it liked and a later one with
+    only a single playable client was left with nothing of its own — Personal
+    Brands took TawusLifts, and Fitness & Sport, whose only Cloudinary client
+    IS TawusLifts, had to show him again. Going in order of how little choice
+    an industry has gives the cornered one its only option and leaves the
+    others to pick around it.
+  */
+  const order = industries
+    .map((entry, index) => ({ entry, index, room: new Set(reelsOf(entry)
+      .filter((row) => isCloudinaryVideo(row.ref)).map((row) => row.client)).size }))
+    .sort((a, b) => (a.room || Infinity) - (b.room || Infinity) || a.index - b.index);
+
+  const usedClients = new Set();
+  const usedRefs = new Set();
+  const chosen = new Map();
+
+  for (const { entry, index } of order) {
+    const [name] = entry;
+    const owned = reelsOf(entry);
+    const plays = owned.filter((row) => isCloudinaryVideo(row.ref));
+    /*
+      Best first: a client nobody else is showing. Then at least a film nobody
+      else is showing — the same client twice is bearable, the same film twice
+      is not. Only then does it repeat, and only then does it fall back to a
+      Drive still, which cannot play inline.
+    */
+    const pick = plays.find((row) => !usedClients.has(row.client) && !usedRefs.has(row.ref))
+      ?? plays.find((row) => !usedRefs.has(row.ref))
+      ?? plays[0]
+      ?? owned.find((row) => !usedClients.has(row.client))
+      ?? owned[0];
+    if (!pick) continue;
+    usedClients.add(pick.client);
+    usedRefs.add(pick.ref);
+    chosen.set(index, { name, ref: pick.ref, client: pick.client, moving: isCloudinaryVideo(pick.ref) });
+  }
+
+  // Back into the order the industries are listed in.
+  const pickerSlides = industries.map((entry, index) => chosen.get(index)).filter(Boolean);
 
   const industryPicker = pickerSlides.length < 2 ? '' : `
     <div class="industry-pick" data-reveal data-industry-pick>
@@ -1849,7 +1897,12 @@ function mountIndustryPicker() {
   const setCredit = () => {
     if (!credit) return;
     const who = slides[at]?.dataset.client ?? '';
-    credit.textContent = who ? `Selected content made for ${who}` : '';
+    credit.textContent = '';
+    if (!who) return;
+    credit.append('Selected content made for ');
+    const strong = document.createElement('strong');
+    strong.textContent = who;            // textContent, so a name is never markup
+    credit.append(strong);
   };
 
   /* A slide's clip is fetched the first time it is shown, not before. */

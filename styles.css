@@ -2496,6 +2496,7 @@ video.hero-hand { height: auto; object-fit: contain; }
   color: var(--text-lo);
   letter-spacing: 0.02em;
 }
+.industry-pick-credit strong { color: var(--text-hi); font-weight: 600; }
 .industry-pick-credit:empty { display: none; }
 
 /* On a tablet the film sits beside the words; it is small enough to. */
@@ -2510,18 +2511,27 @@ video.hero-hand { height: auto; object-fit: contain; }
   given a narrow column and the name is allowed to wrap, which costs a line or
   two on the longest industries but keeps the card to a readable height.
 */
+/*
+  The film keeps its size on a phone and the words give way instead. Shrinking
+  the film to make room for them was the wrong way round — the reel is the
+  thing worth looking at, and the label and the name read perfectly well a
+  size or two down.
+*/
 @media (max-width: 559px) {
   .industry-pick {
-    grid-template-columns: minmax(0, 7.5rem) minmax(0, 1fr);
-    gap: 1.1rem;
+    grid-template-columns: minmax(0, 9.5rem) minmax(0, 1fr);
+    gap: 1rem;
     align-items: center;
   }
   .industry-pick-media { max-width: none; max-height: none; margin-inline: 0; }
-  .industry-pick-body { gap: 0.8rem; }
-  .industry-pick-name { font-size: clamp(1.25rem, 6vw, 1.6rem); }
-  .industry-pick-select { width: 100%; justify-content: space-between; }
-  .industry-pick-choose { width: 100%; }
-  .industry-pick-go { width: 100%; justify-content: center; }
+  .industry-pick-body { gap: 0.6rem; }
+  .industry-pick-label { font-size: 0.625rem; letter-spacing: 0.1em; }
+  .industry-pick-name { font-size: 1.0625rem; letter-spacing: -0.015em; }
+  .industry-pick-select { width: 100%; justify-content: space-between; gap: 0.4rem; }
+  .industry-pick-select .icon { width: 16px; height: 16px; }
+  .industry-pick-choose { width: 100%; gap: 0.5rem; }
+  .industry-pick-go { width: 100%; justify-content: center; padding-inline: 1rem; }
+  .industry-pick-credit { font-size: 0.6875rem; line-height: 1.5; }
 }
 
 /* =========================================================== Hiring ====== */
