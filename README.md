@@ -599,6 +599,13 @@ out entirely.
 The cycling deals a shuffled round of every playable industry, plays it to the end, then
 shuffles again — so each one is shown before any is repeated, and never twice in a row.
 
+**Each industry works through its own clients.** Come back to Personal Brands a second time
+and you get the next client's reel, not the same one again. An industry with a single client
+naturally shows that one every time.
+
+A small ring beside the question runs down the length of each preview — five seconds — and
+disappears once you choose an industry, because nothing is counting down any more.
+
 ### Our Work reels
 
 **Selected reels** — the row at the top of the section. It is the clients ticked *Featured*,

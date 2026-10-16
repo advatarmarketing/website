@@ -2422,6 +2422,55 @@ video.hero-hand { height: auto; object-fit: contain; }
 .industry-pick-label {
   margin: 0;
   color: var(--text-faint);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/*
+  The ring beside the question, emptying over the length of a preview. Its
+  duration is --pick-rotate, set from the one number in app.js that decides
+  how long a slide is held, so the two can never drift apart.
+
+  The circle is drawn from the top and runs clockwise: rotated a quarter turn
+  because SVG starts a circle at three o'clock.
+*/
+.industry-pick-timer {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  display: inline-block;
+}
+.industry-pick-timer svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+  overflow: visible;
+}
+.industry-pick-timer circle {
+  fill: none;
+  stroke-width: 3;
+}
+.pick-timer-track { stroke: var(--btn-outline); }
+.pick-timer-run {
+  stroke: var(--gold-text);
+  stroke-linecap: round;
+  /* 2 x pi x r, r = 10 */
+  stroke-dasharray: 62.83;
+  stroke-dashoffset: 62.83;
+}
+.industry-pick-timer[data-running] .pick-timer-run {
+  animation: pick-countdown var(--pick-rotate, 5200ms) linear forwards;
+}
+@keyframes pick-countdown {
+  from { stroke-dashoffset: 62.83; }
+  to   { stroke-dashoffset: 0; }
+}
+/* Nothing is counting down once somebody has chosen, so nothing is shown. */
+.industry-pick-timer:not([data-running]) { opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .industry-pick-timer { display: none; }
 }
 
 /*

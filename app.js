@@ -1547,32 +1547,43 @@ async function renderOurWork() {
     .sort((a, b) => (a.room || Infinity) - (b.room || Infinity) || a.index - b.index);
 
   const usedClients = new Set();
-  const usedRefs = new Set();
   const chosen = new Map();
 
   for (const { entry, index } of order) {
     const [name] = entry;
     const owned = reelsOf(entry);
-    const plays = owned.filter((row) => isCloudinaryVideo(row.ref));
+
     /*
-      Best first: a client nobody else is showing. Then at least a film nobody
-      else is showing — the same client twice is bearable, the same film twice
-      is not. Only then does it repeat, and only then does it fall back to a
-      Drive still, which cannot play inline.
+      EVERY CLIENT IN THE INDUSTRY, ONE REEL EACH, in the order set in edit
+      mode. The card walks this list: come back to an industry and you get the
+      next client's work, not the same clip again.
     */
-    const chosenRef = pinned.get(name.toLowerCase());
-    const pick = (chosenRef
-        ? { ref: chosenRef, client: ownerOf.get(chosenRef) ?? '' }
-        : null)
-      ?? plays.find((row) => !usedClients.has(row.client) && !usedRefs.has(row.ref))
-      ?? plays.find((row) => !usedRefs.has(row.ref))
-      ?? plays[0]
-      ?? owned.find((row) => !usedClients.has(row.client))
-      ?? owned[0];
-    if (!pick) continue;
-    usedClients.add(pick.client);
-    usedRefs.add(pick.ref);
-    chosen.set(index, { name, ref: pick.ref, client: pick.client, moving: isCloudinaryVideo(pick.ref) });
+    const seen = new Set();
+    const entries = owned
+      .filter((row) => isCloudinaryVideo(row.ref))
+      .filter((row) => (seen.has(row.client) ? false : seen.add(row.client)));
+
+    /*
+      Where in that list to begin. A reel pinned under "Industry reels" wins;
+      otherwise it starts on a client no other industry is leading with, so two
+      industries don't open on the same face.
+    */
+    const pinnedRef = pinned.get(name.toLowerCase());
+    let start = entries.findIndex((row) => row.ref === pinnedRef);
+    if (start < 0) start = entries.findIndex((row) => !usedClients.has(row.client));
+    if (start < 0) start = 0;
+
+    if (entries.length) {
+      usedClients.add(entries[start].client);
+      chosen.set(index, { name, entries, start, moving: true });
+      continue;
+    }
+
+    // Nothing that plays: a single still, which is all a Drive reel can be.
+    const fallback = owned.find((row) => !usedClients.has(row.client)) ?? owned[0];
+    if (!fallback) continue;
+    usedClients.add(fallback.client);
+    chosen.set(index, { name, entries: [fallback], start: 0, moving: false });
   }
 
   // Back into the order the industries are listed in.
@@ -1583,19 +1594,33 @@ async function renderOurWork() {
       <div class="industry-pick-media">
         ${pickerSlides.map((slide, index) => `
           <div class="industry-pick-slide" data-slide="${index}"
-               data-client="${esc(slide.client)}" data-plays="${slide.moving}"
+               data-plays="${slide.moving}" data-turn="${slide.start}"
+               data-reels="${esc(JSON.stringify(slide.entries.map((row) => ({
+                 r: row.ref,
+                 c: row.client,
+                 p: slide.moving ? cloudinaryStill(row.ref, PICK_POSTER) : videoPoster(row.ref, 720),
+               }))))}"
                ${index ? '' : 'data-on="true"'}>
             ${slide.moving
-              ? `<video muted loop playsinline preload="none" aria-hidden="true"
-                        poster="${esc(cloudinaryStill(slide.ref, PICK_POSTER))}"
-                        data-ref="${esc(slide.ref)}"></video>`
-              : `<img src="${esc(videoPoster(slide.ref, 720))}" alt="" loading="lazy"
-                       decoding="async" referrerpolicy="no-referrer">`}
+              ? `<video muted loop playsinline preload="none" aria-hidden="true"></video>`
+              : `<img alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`}
           </div>`).join('')}
       </div>
 
       <div class="industry-pick-body">
-        <p class="industry-pick-label micro" data-copy="work.pick.label">What's your industry?</p>
+        <p class="industry-pick-label micro">
+          <span data-copy="work.pick.label">What's your industry?</span>
+          ${/*
+              How long this preview has left. It is decoration for a thing that
+              changes on its own, so a screen reader is told nothing about it.
+            */''}
+          <span class="industry-pick-timer" data-pick-timer aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <circle class="pick-timer-track" cx="12" cy="12" r="10"></circle>
+              <circle class="pick-timer-run" cx="12" cy="12" r="10"></circle>
+            </svg>
+          </span>
+        </p>
 
         <div class="industry-pick-choose">
           ${/*
@@ -1913,34 +1938,74 @@ function mountIndustryPicker() {
 
   const name = $('[data-pick-name]', card);
   const credit = $('[data-pick-credit]', card);
+  const ring = $('[data-pick-timer]', card);
 
-  const show = (next) => {
-    if (next === at) return;
-    slides[at]?.removeAttribute('data-on');
-    slides[at]?.querySelector('video')?.pause();
-    at = next;
-    slides[at].dataset.on = 'true';
-    select.value = String(at);
-    if (name) {
-      name.textContent = select.options[at]?.textContent ?? '';
-      // Re-run the fade on the word so the name arrives with the film.
-      name.dataset.swap = 'true';
-      requestAnimationFrame(() => { delete name.dataset.swap; });
+  const reelsFor = (slide) => {
+    try { return JSON.parse(slide.dataset.reels || '[]'); } catch { return []; }
+  };
+
+  /* The client this industry is up to, and the next time it is its turn. */
+  const currentReel = (slide) => {
+    const reels = reelsFor(slide);
+    if (!reels.length) return null;
+    return reels[(Number(slide.dataset.turn) || 0) % reels.length];
+  };
+
+  const show = (next, { advance = false } = {}) => {
+    if (next === at && !advance) return;
+    if (next !== at) {
+      slides[at]?.removeAttribute('data-on');
+      slides[at]?.querySelector('video')?.pause();
+      at = next;
+      slides[at].dataset.on = 'true';
+      select.value = String(at);
+      if (name) {
+        name.textContent = select.options[at]?.textContent ?? '';
+        // Re-run the fade on the word so the name arrives with the film.
+        name.dataset.swap = 'true';
+        requestAnimationFrame(() => { delete name.dataset.swap; });
+      }
+    }
+    /*
+      Each time an industry comes round it moves on to the next of its clients,
+      so a second look at Personal Brands is a different client's work.
+    */
+    if (advance) {
+      const reels = reelsFor(slides[at]);
+      if (reels.length > 1) {
+        slides[at].dataset.turn = String(((Number(slides[at].dataset.turn) || 0) + 1) % reels.length);
+      }
     }
     setCredit();
+    restartTimer();
     play(slides[at]);
   };
 
   /* Whose work is on screen. */
   const setCredit = () => {
     if (!credit) return;
-    const who = slides[at]?.dataset.client ?? '';
+    const who = currentReel(slides[at])?.c ?? '';
     credit.textContent = '';
     if (!who) return;
     credit.append('Selected content made for ');
     const strong = document.createElement('strong');
     strong.textContent = who;            // textContent, so a name is never markup
     credit.append(strong);
+  };
+
+  /*
+    The ring beside the question, running down the length of this preview. It
+    is restarted by taking the animation off and putting it back a frame later
+    — the same animation re-applied to the same element is otherwise ignored.
+    It goes for good once somebody has chosen, because nothing is counting down
+    any more.
+  */
+  const restartTimer = () => {
+    if (!ring) return;
+    if (taken || !onScreen) { ring.removeAttribute('data-running'); return; }
+    ring.removeAttribute('data-running');
+    void ring.offsetWidth;
+    ring.dataset.running = 'true';
   };
 
   const frame = $('.industry-pick-media', card);
@@ -1975,6 +2040,24 @@ function mountIndustryPicker() {
   /* A slide's clip is fetched the first time it is shown, not before. */
   const play = async (slide) => {
     if (!slide || !onScreen) return;
+    const reel = currentReel(slide);
+    if (!reel) return;
+
+    const shown = slide.querySelector('video, img');
+    if (shown?.tagName === 'IMG') {
+      if (shown.getAttribute('src') !== reel.p) shown.src = reel.p;
+    } else if (shown) {
+      // A different clip than last time means a new poster and a new film.
+      if (shown.poster !== reel.p) {
+        shown.pause();
+        shown.removeAttribute('src');
+        shown.load();
+        shown.poster = reel.p;
+        delete slide.dataset.ar;
+      }
+      shown.dataset.ref = reel.r;
+    }
+
     const ar = await learn(slide);
     if (slides[at] !== slide) return;          // moved on while the poster loaded
     shape(ar);
@@ -1992,6 +2075,8 @@ function mountIndustryPicker() {
   };
 
   const ROTATE = 5200;               // long enough to take a slide in
+  // The ring beside the question runs on exactly this, so the two agree.
+  card.style.setProperty('--pick-rotate', `${ROTATE}ms`);
 
   /*
     A SHUFFLED QUEUE, NOT A COIN TOSS. Picking at random each time meant the
@@ -2030,7 +2115,7 @@ function mountIndustryPicker() {
     if (taken || !onScreen || inPlay.length < 2) return;
     if (!queue.length) refill();
     const next = queue.shift();
-    if (next !== undefined) show(next);
+    if (next !== undefined) show(next, { advance: true });
   };
   const start = () => { if (!timer && !taken) timer = setInterval(tick, ROTATE); };
   const stop = () => { clearInterval(timer); timer = 0; };
@@ -2038,6 +2123,7 @@ function mountIndustryPicker() {
   const settle = () => {
     taken = true;
     stop();
+    ring?.removeAttribute('data-running');
   };
   select.addEventListener('pointerdown', settle);
   select.addEventListener('focus', settle);
@@ -2054,11 +2140,13 @@ function mountIndustryPicker() {
   /* Open on an industry that moves, so the card is alive the moment it is seen. */
   if (inPlay.length && !inPlay.includes(at)) show(inPlay[0]);
   setCredit();
+  restartTimer();
 
   if ('IntersectionObserver' in window) {
     const watcher = new IntersectionObserver(([entry]) => {
       onScreen = entry.isIntersecting;
-      if (onScreen) { play(slides[at]); start(); } else { stop(); slides[at]?.querySelector('video')?.pause(); }
+      if (onScreen) { play(slides[at]); start(); restartTimer(); }
+      else { stop(); ring?.removeAttribute('data-running'); slides[at]?.querySelector('video')?.pause(); }
     }, { rootMargin: '10% 0px' });
     watcher.observe(card);
     registerCleanup(() => { watcher.disconnect(); stop(); });
