@@ -674,6 +674,13 @@ async function renderHome() {
   const wins = clients.filter((client) => client.isRecentWin).sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
 
   /*
+    The same "What's your industry?" card that Our Work has, under the latest
+    work. Here its "See more" leaves the page: it opens Our Work at that
+    industry rather than a panel on this one — see openIndustry.
+  */
+  const industryPicker = industryPickerHtml(industriesOf(clients));
+
+  /*
     The background behind the home page's first screen. Each of these takes a
     Cloudinary link or any other web address; a Cloudinary one is re-encoded and
     sized on delivery by assetUrl, so there is nothing to prepare before pasting
@@ -893,6 +900,9 @@ async function renderHome() {
                        aria-label="Scroll to more recent wins">${icon('arrowRight')}</button>
              </div>`
           : emptyState('No recent wins yet', 'Add clients and flag them as recent wins from Web dev edit mode.')}
+
+        ${industryPicker}
+
         ${editOnly(`
         <div style="margin-top:1.5rem">
           <button type="button" class="edit-chip" data-edit="recent-wins">${icon('pencil')} Edit recent wins</button>
@@ -1171,6 +1181,7 @@ function mountHome() {
   $$('.logo-mark[data-logo]').forEach(drawLogoMark);
   mountHeroVideo();
   mountHeroParallax();
+  mountIndustryPicker();
 }
 
 /**
@@ -1447,207 +1458,7 @@ async function renderOurWork() {
     ? `<ul class="client-table">${group.map(clientTableRow(scope)).join('')}</ul>`
     : `<p class="tiny client-table-empty">${emptyLine}</p>`;
 
-  /*
-    "What's your industry?" — a reel from one industry at a time, cycling at
-    random, with the industry's name as a menu you can open to choose your own.
-
-    WHAT EACH INDUSTRY SHOWS. Its clients' reels, preferring one that lives on
-    Cloudinary: those play inline, muted and looping, which is the point of the
-    thing. A Drive reel cannot play inline without the whole Drive player
-    around it, so an industry that only has those shows its first frame as a
-    still instead — a quieter card rather than a broken one. An industry with
-    no reels at all is left out, since there would be nothing to show.
-
-    Everything here is markup only; mountIndustryPicker does the cycling.
-  */
-  /*
-    EACH CLIP KEEPS ITS OWN SHAPE, and the frame takes that shape.
-
-    Several reels are stored anamorphically: a 1080x1080 raster flagged "show
-    me as 9:16", so the picture inside is squeezed and the player is meant to
-    stretch it back. Cloudinary ignores that flag when it crops — tested with
-    the crop both before and after the transcode — so cropping to 9:16 cut the
-    sides off a squeezed square, which is the zoomed, wrong-shaped frame.
-    Forcing every clip to 9:16 instead fixed those but stretched the one reel
-    that is a genuine square.
-
-    Its IMAGE pipeline does honour the flag, though. So the poster is asked for
-    at no particular shape and arrives at the clip's true one — 9:16 for an
-    anamorphic reel, 1:1 for a square one — and mountIndustryPicker measures it,
-    shapes the frame to match and asks for the film at exactly that size.
-    Nothing is cropped, nothing is stretched, whatever shape it was cut.
-  */
-  const PICK_POSTER = 'c_limit,w_720';
-
-  /*
-    One industry's work, and whose it is. A clip on Cloudinary plays inline,
-    which is the point of the card; a Drive one cannot without Drive's whole
-    player around it, so an industry that only has those shows its first frame
-    as a still. Preferring a Cloudinary reel means most industries move.
-  */
-  /*
-    One industry's work, and whose it is.
-
-    NO TWO INDUSTRIES SHOW THE SAME THING. A client can belong to more than one
-    industry — TawusLifts is both a personal brand and a fitness client — and
-    picking "the first reel that plays" gave two industries the identical film.
-    So each industry takes the first reel whose CLIENT no other industry has
-    taken; failing that, one whose video at least hasn't been used; and only if
-    there is nothing else does it repeat.
-
-    A clip on Cloudinary plays inline, which is the point of the card; a Drive
-    one cannot without Drive's whole player around it, so an industry that only
-    has those shows its first frame as a still.
-  */
-  /*
-    An industry's own clients come first — the ones whose Industry is this one,
-    ahead of those merely also filed here — and within that, the order set in
-    edit mode. So which client fronts an industry is something you control from
-    Order, notes & tags rather than an accident of the list.
-  */
-  const reelsOf = ([name, group]) => [...group]
-    .sort((a, b) => Number(b.category === name) - Number(a.category === name)
-      || (a.order ?? 999) - (b.order ?? 999))
-    .flatMap((client) => [client.selectedReel, ...(client.videos ?? [])
-      .map((video) => video.driveFileId)]
-      .filter(Boolean)
-      .map((ref) => ({ ref, client: client.name })));
-
-  /*
-    THE SCARCEST INDUSTRY CHOOSES FIRST. Taken in display order, the first
-    industry helped itself to whichever client it liked and a later one with
-    only a single playable client was left with nothing of its own — Personal
-    Brands took TawusLifts, and Fitness & Sport, whose only Cloudinary client
-    IS TawusLifts, had to show him again. Going in order of how little choice
-    an industry has gives the cornered one its only option and leaves the
-    others to pick around it.
-  */
-  /*
-    A reel named under "Industry reels" in edit mode wins outright. That is the
-    existing way to say which work fronts an industry, so the card obeys it
-    rather than inventing a second one: set a row there and this card shows it.
-    Whose it is comes from matching the link back to the client who owns it.
-  */
-  const ownerOf = new Map();
-  for (const client of clients) {
-    for (const ref of [client.selectedReel, ...(client.videos ?? []).map((v) => v.driveFileId)]) {
-      if (ref && !ownerOf.has(ref)) ownerOf.set(ref, client.name);
-    }
-  }
-  const pinned = new Map();
-  for (const row of state.settings?.industryReels ?? []) {
-    if (row?.video && row?.industry && !pinned.has(row.industry.toLowerCase())) {
-      pinned.set(row.industry.toLowerCase(), row.video);
-    }
-  }
-
-  const order = industries
-    .map((entry, index) => ({ entry, index, room: new Set(reelsOf(entry)
-      .filter((row) => isCloudinaryVideo(row.ref)).map((row) => row.client)).size }))
-    .sort((a, b) => (a.room || Infinity) - (b.room || Infinity) || a.index - b.index);
-
-  const usedClients = new Set();
-  const chosen = new Map();
-
-  for (const { entry, index } of order) {
-    const [name] = entry;
-    const owned = reelsOf(entry);
-
-    /*
-      EVERY CLIENT IN THE INDUSTRY, ONE REEL EACH, in the order set in edit
-      mode. The card walks this list: come back to an industry and you get the
-      next client's work, not the same clip again.
-    */
-    const seen = new Set();
-    const entries = owned
-      .filter((row) => isCloudinaryVideo(row.ref))
-      .filter((row) => (seen.has(row.client) ? false : seen.add(row.client)));
-
-    /*
-      Where in that list to begin. A reel pinned under "Industry reels" wins;
-      otherwise it starts on a client no other industry is leading with, so two
-      industries don't open on the same face.
-    */
-    const pinnedRef = pinned.get(name.toLowerCase());
-    let start = entries.findIndex((row) => row.ref === pinnedRef);
-    if (start < 0) start = entries.findIndex((row) => !usedClients.has(row.client));
-    if (start < 0) start = 0;
-
-    if (entries.length) {
-      usedClients.add(entries[start].client);
-      chosen.set(index, { name, entries, start, moving: true });
-      continue;
-    }
-
-    // Nothing that plays: a single still, which is all a Drive reel can be.
-    const fallback = owned.find((row) => !usedClients.has(row.client)) ?? owned[0];
-    if (!fallback) continue;
-    usedClients.add(fallback.client);
-    chosen.set(index, { name, entries: [fallback], start: 0, moving: false });
-  }
-
-  // Back into the order the industries are listed in.
-  const pickerSlides = industries.map((entry, index) => chosen.get(index)).filter(Boolean);
-
-  const industryPicker = pickerSlides.length < 2 ? '' : `
-    <div class="industry-pick" data-reveal data-industry-pick>
-      <div class="industry-pick-media">
-        ${pickerSlides.map((slide, index) => `
-          <div class="industry-pick-slide" data-slide="${index}"
-               data-plays="${slide.moving}" data-turn="${slide.start}"
-               data-reels="${esc(JSON.stringify(slide.entries.map((row) => ({
-                 r: row.ref,
-                 c: row.client,
-                 p: slide.moving ? cloudinaryStill(row.ref, PICK_POSTER) : videoPoster(row.ref, 720),
-               }))))}"
-               ${index ? '' : 'data-on="true"'}>
-            ${slide.moving
-              ? `<video muted loop playsinline preload="none" aria-hidden="true"></video>`
-              : `<img alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`}
-          </div>`).join('')}
-      </div>
-
-      <div class="industry-pick-body">
-        <p class="industry-pick-label micro">
-          <span data-copy="work.pick.label">What's your industry?</span>
-          ${/*
-              How long this preview has left. It is decoration for a thing that
-              changes on its own, so a screen reader is told nothing about it.
-            */''}
-          <span class="industry-pick-timer" data-pick-timer aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <circle class="pick-timer-track" cx="12" cy="12" r="10"></circle>
-              <circle class="pick-timer-run" cx="12" cy="12" r="10"></circle>
-            </svg>
-          </span>
-        </p>
-
-        <div class="industry-pick-choose">
-          ${/*
-              The name you can see is ours; the <select> is a transparent sheet
-              laid over it. A bare <select> is as wide as its longest option,
-              so the rule under "Education" would have run the width of
-              "Community & Islamic Organisations" — and this way the browser's
-              own menu still opens, which on a phone is the right menu.
-            */''}
-          <span class="industry-pick-select">
-            <span class="industry-pick-name" data-pick-name>${esc(pickerSlides[0].name)}</span>
-            ${icon('chevronDown')}
-            <select class="industry-pick-native" data-pick-industry aria-label="Choose an industry">
-              ${pickerSlides.map((slide, index) =>
-                `<option value="${index}">${esc(slide.name)}</option>`).join('')}
-            </select>
-          </span>
-
-          <button type="button" class="btn btn--ember industry-pick-go" data-pick-go>
-            <span data-copy="work.pick.cta">See more</span>${icon('arrowRight')}
-          </button>
-        </div>
-
-        <p class="industry-pick-note tiny" data-copy="work.pick.note">We'll take you straight to that work.</p>
-        <p class="industry-pick-credit tiny" data-pick-credit></p>
-      </div>
-    </div>`;
+  const industryPicker = industryPickerHtml(industries);
 
   const industryPanel = ([name, group], index) => {
     const reels = industryReels(name, group);
@@ -1923,6 +1734,213 @@ async function renderOurWork() {
   it, and a video decoding in a part of the page nobody is looking at is a
   warm phone for nothing.
 */
+/*
+  "WHAT'S YOUR INDUSTRY?" — the card itself, built here so that both the home
+  page and Our Work can show the same one. On Our Work its "See more" opens the
+  industry view further down the same page; on the home page there is no such
+  view, so the button carries the reader over to Our Work and opens it there —
+  openIndustry works out which of the two it is looking at.
+
+  `industries` is industriesOf(clients). It returns an empty string when there
+  is not enough that plays to be worth cycling.
+*/
+function industryPickerHtml(industries) {
+  /*
+    "What's your industry?" — a reel from one industry at a time, cycling at
+    random, with the industry's name as a menu you can open to choose your own.
+
+    WHAT EACH INDUSTRY SHOWS. Its clients' reels, preferring one that lives on
+    Cloudinary: those play inline, muted and looping, which is the point of the
+    thing. A Drive reel cannot play inline without the whole Drive player
+    around it, so an industry that only has those shows its first frame as a
+    still instead — a quieter card rather than a broken one. An industry with
+    no reels at all is left out, since there would be nothing to show.
+
+    Everything here is markup only; mountIndustryPicker does the cycling.
+  */
+  /*
+    EACH CLIP KEEPS ITS OWN SHAPE, and the frame takes that shape.
+
+    Several reels are stored anamorphically: a 1080x1080 raster flagged "show
+    me as 9:16", so the picture inside is squeezed and the player is meant to
+    stretch it back. Cloudinary ignores that flag when it crops — tested with
+    the crop both before and after the transcode — so cropping to 9:16 cut the
+    sides off a squeezed square, which is the zoomed, wrong-shaped frame.
+    Forcing every clip to 9:16 instead fixed those but stretched the one reel
+    that is a genuine square.
+
+    Its IMAGE pipeline does honour the flag, though. So the poster is asked for
+    at no particular shape and arrives at the clip's true one — 9:16 for an
+    anamorphic reel, 1:1 for a square one — and mountIndustryPicker measures it,
+    shapes the frame to match and asks for the film at exactly that size.
+    Nothing is cropped, nothing is stretched, whatever shape it was cut.
+  */
+  const PICK_POSTER = 'c_limit,w_720';
+
+  /*
+    One industry's work, and whose it is. A clip on Cloudinary plays inline,
+    which is the point of the card; a Drive one cannot without Drive's whole
+    player around it, so an industry that only has those shows its first frame
+    as a still. Preferring a Cloudinary reel means most industries move.
+  */
+  /*
+    One industry's work, and whose it is.
+
+    NO TWO INDUSTRIES SHOW THE SAME THING. A client can belong to more than one
+    industry — TawusLifts is both a personal brand and a fitness client — and
+    picking "the first reel that plays" gave two industries the identical film.
+    So each industry takes the first reel whose CLIENT no other industry has
+    taken; failing that, one whose video at least hasn't been used; and only if
+    there is nothing else does it repeat.
+
+    A clip on Cloudinary plays inline, which is the point of the card; a Drive
+    one cannot without Drive's whole player around it, so an industry that only
+    has those shows its first frame as a still.
+  */
+  /*
+    An industry's own clients come first — the ones whose Industry is this one,
+    ahead of those merely also filed here — and within that, the order set in
+    edit mode. So which client fronts an industry is something you control from
+    Order, notes & tags rather than an accident of the list.
+  */
+  const reelsOf = ([name, group]) => [...group]
+    .sort((a, b) => Number(b.category === name) - Number(a.category === name)
+      || (a.order ?? 999) - (b.order ?? 999))
+    .flatMap((client) => [client.selectedReel, ...(client.videos ?? [])
+      .map((video) => video.driveFileId)]
+      .filter(Boolean)
+      .map((ref) => ({ ref, client: client.name })));
+
+  /*
+    THE SCARCEST INDUSTRY CHOOSES FIRST. Taken in display order, the first
+    industry helped itself to whichever client it liked and a later one with
+    only a single playable client was left with nothing of its own — Personal
+    Brands took TawusLifts, and Fitness & Sport, whose only Cloudinary client
+    IS TawusLifts, had to show him again. Going in order of how little choice
+    an industry has gives the cornered one its only option and leaves the
+    others to pick around it.
+  */
+  /*
+    A reel named under "Industry reels" in edit mode wins outright. That is the
+    existing way to say which work fronts an industry, so the card obeys it
+    rather than inventing a second one: set a row there and this card shows it.
+  */
+  const pinned = new Map();
+  for (const row of state.settings?.industryReels ?? []) {
+    if (row?.video && row?.industry && !pinned.has(row.industry.toLowerCase())) {
+      pinned.set(row.industry.toLowerCase(), row.video);
+    }
+  }
+
+  const order = industries
+    .map((entry, index) => ({ entry, index, room: new Set(reelsOf(entry)
+      .filter((row) => isCloudinaryVideo(row.ref)).map((row) => row.client)).size }))
+    .sort((a, b) => (a.room || Infinity) - (b.room || Infinity) || a.index - b.index);
+
+  const usedClients = new Set();
+  const chosen = new Map();
+
+  for (const { entry, index } of order) {
+    const [name] = entry;
+    const owned = reelsOf(entry);
+
+    /*
+      EVERY CLIENT IN THE INDUSTRY, ONE REEL EACH, in the order set in edit
+      mode. The card walks this list: come back to an industry and you get the
+      next client's work, not the same clip again.
+    */
+    const seen = new Set();
+    const entries = owned
+      .filter((row) => isCloudinaryVideo(row.ref))
+      .filter((row) => (seen.has(row.client) ? false : seen.add(row.client)));
+
+    /*
+      Where in that list to begin. A reel pinned under "Industry reels" wins;
+      otherwise it starts on a client no other industry is leading with, so two
+      industries don't open on the same face.
+    */
+    const pinnedRef = pinned.get(name.toLowerCase());
+    let start = entries.findIndex((row) => row.ref === pinnedRef);
+    if (start < 0) start = entries.findIndex((row) => !usedClients.has(row.client));
+    if (start < 0) start = 0;
+
+    if (entries.length) {
+      usedClients.add(entries[start].client);
+      chosen.set(index, { name, entries, start, moving: true });
+      continue;
+    }
+
+    // Nothing that plays: a single still, which is all a Drive reel can be.
+    const fallback = owned.find((row) => !usedClients.has(row.client)) ?? owned[0];
+    if (!fallback) continue;
+    usedClients.add(fallback.client);
+    chosen.set(index, { name, entries: [fallback], start: 0, moving: false });
+  }
+
+  // Back into the order the industries are listed in.
+  const pickerSlides = industries.map((entry, index) => chosen.get(index)).filter(Boolean);
+
+  return pickerSlides.length < 2 ? '' : `
+    <div class="industry-pick" data-reveal data-industry-pick>
+      <div class="industry-pick-media">
+        ${pickerSlides.map((slide, index) => `
+          <div class="industry-pick-slide" data-slide="${index}"
+               data-plays="${slide.moving}" data-turn="${slide.start}"
+               data-reels="${esc(JSON.stringify(slide.entries.map((row) => ({
+                 r: row.ref,
+                 c: row.client,
+                 p: slide.moving ? cloudinaryStill(row.ref, PICK_POSTER) : videoPoster(row.ref, 720),
+               }))))}"
+               ${index ? '' : 'data-on="true"'}>
+            ${slide.moving
+              ? `<video muted loop playsinline preload="none" aria-hidden="true"></video>`
+              : `<img alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`}
+          </div>`).join('')}
+      </div>
+
+      <div class="industry-pick-body">
+        <p class="industry-pick-label micro">
+          <span data-copy="work.pick.label">What's your industry?</span>
+          ${/*
+              How long this preview has left. It is decoration for a thing that
+              changes on its own, so a screen reader is told nothing about it.
+            */''}
+          <span class="industry-pick-timer" data-pick-timer aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <circle class="pick-timer-track" cx="12" cy="12" r="10"></circle>
+              <circle class="pick-timer-run" cx="12" cy="12" r="10"></circle>
+            </svg>
+          </span>
+        </p>
+
+        <div class="industry-pick-choose">
+          ${/*
+              The name you can see is ours; the <select> is a transparent sheet
+              laid over it. A bare <select> is as wide as its longest option,
+              so the rule under "Education" would have run the width of
+              "Community & Islamic Organisations" — and this way the browser's
+              own menu still opens, which on a phone is the right menu.
+            */''}
+          <span class="industry-pick-select">
+            <span class="industry-pick-name" data-pick-name>${esc(pickerSlides[0].name)}</span>
+            ${icon('chevronDown')}
+            <select class="industry-pick-native" data-pick-industry aria-label="Choose an industry">
+              ${pickerSlides.map((slide, index) =>
+                `<option value="${index}">${esc(slide.name)}</option>`).join('')}
+            </select>
+          </span>
+
+          <button type="button" class="btn btn--ember industry-pick-go" data-pick-go>
+            <span data-copy="work.pick.cta">See more</span>${icon('arrowRight')}
+          </button>
+        </div>
+
+        <p class="industry-pick-note tiny" data-copy="work.pick.note">We'll take you straight to that work.</p>
+        <p class="industry-pick-credit tiny" data-pick-credit></p>
+      </div>
+    </div>`;
+}
+
 function mountIndustryPicker() {
   const card = $('[data-industry-pick]');
   if (!card) return;
@@ -2167,7 +2185,20 @@ function openIndustry(name) {
   if (!name) return;
   const byIndustry = $('[data-toggle="industries"]');
   const panel = document.getElementById(`industry-${name}`);
-  if (!byIndustry || !panel) return;
+  /*
+    Not on this page — the home page's copy of the card. So the industry rides
+    along in the address and Our Work opens it on arrival (see mountOurWork).
+    The name is in the address rather than a variable in here so that the link
+    still works after a reload, or if it is shared.
+  */
+  if (!byIndustry || !panel) {
+    // Unless this IS Our Work and the industry simply isn't there any more —
+    // sending the page to itself over and over would be a loop with no end.
+    if (window.location.pathname !== '/our-work') {
+      navigate(`/our-work?industry=${encodeURIComponent(name)}`);
+    }
+    return;
+  }
 
   // Open the industry view if it is closed; its own handler does the rest.
   if (byIndustry.getAttribute('aria-expanded') !== 'true') byIndustry.click();
@@ -2184,6 +2215,17 @@ function mountOurWork() {
   $('[data-results-modal]')?.addEventListener('click', openCaseStudies);
   mountCarousel($('.carousel--reels'));
   mountIndustryPicker();
+
+  /*
+    Arrived from the home page's industry card: open that industry and go to
+    it. The address is then tidied back to /our-work, so going back lands on
+    the home page rather than on this page again without the panel open.
+  */
+  const asked = new URLSearchParams(window.location.search).get('industry');
+  if (asked) {
+    history.replaceState({}, '', '/our-work');
+    requestAnimationFrame(() => openIndustry(asked));
+  }
 
   /*
     Delegated, because the photographs are inside panels that are built before
@@ -5693,13 +5735,16 @@ async function playLoader() {
   const root = document.documentElement;
   const loader = $('.loader');
   if (!root.hasAttribute('data-loading') || !loader) return;
+  /*
+    Already skipped before this file got here — which, given boot() fetches
+    four things first, is a common way round. The script in index.html owns
+    the skip and is lifting the film away itself, so there is nothing to do.
+  */
+  if (root.hasAttribute('data-loader-skipped')) return;
   const film = $('.loader-video', loader);
 
   await new Promise((resolve) => {
     let done = false;
-    const onKey = (event) => {
-      if (['Escape', 'Enter', ' '].includes(event.key)) { event.preventDefault(); finish(); }
-    };
     const timers = [
       // A slow connection shouldn't hold the site hostage: if the film hasn't
       // started within 3.5s, or hasn't finished within 6.5s, go straight in.
@@ -5712,17 +5757,24 @@ async function playLoader() {
       timers.forEach(clearTimeout);
       film.removeEventListener('ended', finish);
       film.removeEventListener('error', finish);
-      loader.removeEventListener('click', finish);
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('loader-skip', finish);
       resolve();
     }
     if (film.ended) { finish(); return; }
     film.addEventListener('ended', finish);
     film.addEventListener('error', finish);
-    loader.addEventListener('click', finish);
-    document.addEventListener('keydown', onKey);
+    /*
+      The skip itself is index.html's, so that a tap in the first half-second
+      is answered. All that is needed here is to stop waiting for an ending
+      that is no longer coming.
+    */
+    document.addEventListener('loader-skip', finish);
     film.play()?.catch(() => finish());
   });
+
+  // Skipped part-way: there is no wordmark on screen to hand the logo off
+  // from, and index.html is already seeing the film out.
+  if (root.hasAttribute('data-loader-skipped')) return;
 
   try {
     await handOffLogo(loader, film);

@@ -238,7 +238,17 @@ A fresh load of the **homepage** opens on the intro film (`assets/loader.mp4`, 3
 When it ends on the Advatar wordmark, the wordmark flies from the centre of the screen into
 the nav, landing exactly on the logo, while the backdrop fades away to reveal the page.
 
-- Click, tap, **Escape**, **Enter** or **Space** skips straight to the flight.
+- Click, tap, **Escape**, **Enter** or **Space** skips it. A skip takes you straight to the
+  page rather than through the flight — there is no wordmark on screen yet to fly.
+- **Skipping works from the very first frame.** It used to be handled in `app.js`, which only
+  gets to the film after fetching the settings, the text, the sign-in check and the page's own
+  content. On a phone those four round trips can outlast the film, and until they finished
+  nothing was listening: a tap on Skip did nothing at all. It is handled in `index.html` now,
+  while the page is still being read, so there is no window where the button is dead. It
+  answers to `pointerup` as well as to a click, because a tap that slides a pixel or two
+  counts as a swipe on a phone and no click is ever sent — which is why this went wrong on a
+  phone far more often than on a computer. On a narrow screen the button also sits higher up,
+  clear of the browser's own toolbar and the home bar, which were covering it.
 - It never plays on other pages, for `prefers-reduced-motion`, or with `?loader=0`. If the
   film can't load or play, the page is released at once, and a 15-second failsafe in
   `index.html` covers the case where `app.js` never runs.
@@ -560,14 +570,19 @@ scrolling down the page.
 
 ### What's your industry?
 
-Under the reels on Our Work there is a card that shows one industry's work at a time: a reel
-playing silently on a loop, with the industry's name beside it. It changes every few seconds,
-at random, and never repeats the one already up.
+This card shows one industry's work at a time: a reel playing silently on a loop, with the
+industry's name beside it. It changes every few seconds, at random, and never repeats the one
+already up. **It is in two places** — under the reels on Our Work, and on the home page under
+*The latest work* — and it is the same card in both, built from the same clients.
 
 The name is also a menu. Open it, pick a trade, and the card settles on it and stops changing
 — a menu that keeps moving under your hand is a menu you cannot use. **See more** then opens
 the industry view at that trade and takes you to it, which is the same place *See more by
 industry* leads, only straight to the one you chose.
+
+From the **home page** the same button carries you over to Our Work and opens that industry
+once it arrives, so it lands in the same place as if you had been there all along. Nothing to
+set: the card works out for itself which of the two pages it is on.
 
 Under the name it says whose work is playing — **Selected content made for …**, the client's
 name in bold — which changes with the film.

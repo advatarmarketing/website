@@ -56,7 +56,8 @@
 <!--
   The homepage intro film — only shown while <html data-loading> is set. It
   starts downloading and playing here, during parse, instead of waiting for
-  app.js. Click, tap, Escape, Enter or Space skips it.
+  app.js. The skip is handled down here too, rather than in app.js, so that it
+  works from the first frame. Click, tap, Escape, Enter or Space skips it.
 -->
 <div class="loader" aria-hidden="true">
   <!--
@@ -78,6 +79,60 @@
     film.preload = 'auto';
     var started = film.play();
     if (started && started.catch) started.catch(function () { /* app.js handles it */ });
+
+    /*
+      SKIPPING WORKS FROM THE FIRST FRAME.
+
+      This used to be app.js's job, and app.js only reached it after fetching
+      the site's settings, its text, the sign-in check and the page's own
+      content — four round trips. On a phone those can easily take longer than
+      the film itself, and until they finished there was nothing listening: a
+      tap on Skip simply did nothing. So the gesture is handled here, during
+      parse, before a single thing is fetched.
+
+      It answers to pointerup as well as click, because on a phone a tap that
+      slides a pixel or two counts as a swipe and no click is ever sent — which
+      is exactly why this failed on mobile more often than on a desktop.
+    */
+    var gone = false;
+    function leave() {
+      if (gone) return;
+      gone = true;
+      try { film.pause(); } catch (e) {}
+      film.style.opacity = '0';
+      loader.classList.add('loader--lifting');
+      document.removeEventListener('keydown', onKey);
+      /*
+        Tell app.js, which may be part-way through waiting for the film to end:
+        it stops waiting, and it doesn't fly the logo in from a wordmark that
+        was never reached. The flag sits on <html> rather than on the loader,
+        so it survives the loader being taken away.
+      */
+      document.documentElement.setAttribute('data-loader-skipped', '');
+      document.dispatchEvent(new Event('loader-skip'));
+      // The black lifts away over the same beat as it does at the film's end.
+      setTimeout(function () {
+        document.documentElement.removeAttribute('data-loading');
+        loader.remove();
+      }, 900);
+    }
+    function onKey(event) {
+      /*
+        Once the film has gone — skipped, ended, or given up on — this has no
+        business holding on to the keyboard. Space scrolls the page, and a
+        listener left behind taking preventDefault() on it would have stopped
+        the whole site scrolling by spacebar for the rest of the visit.
+      */
+      if (!loader.isConnected) { document.removeEventListener('keydown', onKey); return; }
+      if (event.key === 'Escape' || event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        leave();
+      }
+    }
+    loader.addEventListener('pointerup', leave);
+    loader.addEventListener('touchend', leave);     // older iOS, before Pointer Events
+    loader.addEventListener('click', leave);
+    document.addEventListener('keydown', onKey);
 
     /*
       Carry the film's background out to the edges of the screen, so that a film

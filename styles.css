@@ -3887,6 +3887,21 @@ html[data-loading] { overflow: hidden; }
 .loader[data-wash='light'] .loader-skip:hover { color: #171717; }
 .loader--lifting .loader-skip { opacity: 0; }
 
+/*
+  On a phone the bottom of the screen belongs to the browser and the system:
+  Safari's own toolbar sits over it, and under that is the home bar, where a
+  swipe goes to the operating system rather than the page. A button down there
+  cannot reliably be pressed, which is half of why Skip seemed not to work on
+  a phone. So it is lifted clear of both, and given a finger-sized target.
+*/
+@media (max-width: 768px) {
+  .loader-skip {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 4.5rem);
+    min-height: 44px;
+    padding: 0.7rem 1.4rem;
+  }
+}
+
 .loader-flyer {
   position: fixed;
   z-index: 301;
